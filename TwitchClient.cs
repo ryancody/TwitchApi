@@ -13,21 +13,28 @@ public class TwitchClient
     private TwitchHttpClient httpClient;
     private CancellationTokenSource cts = new CancellationTokenSource();
     private Queue<WebSocketMessage> messageQueue = [];
-    private string broadcasterLogin;
+    private readonly string channelName;
+    private readonly string applicationId;
     private User broadcasterUser;
     private DeviceCodeResponse deviceCodeResponse;
-    private readonly string cachedBearerTokenGlobalizedPath = Path.GetFullPath("user://twitch_token.json");
 
     private bool isTokenValid = false;
 
     private const int shortValidationTimer = 2000;
 
-    public TwitchClient(AppInfo appInfo, string channelName)
+    public TwitchClient(AppInfo appInfo)
     {
         webSocket = new ClientWebSocket();
         httpClient = new TwitchHttpClient(appInfo);
-        broadcasterLogin = channelName;
+        channelName = appInfo.Channel;
+        applicationId = appInfo.Id;
         httpClient.RequestProcessed += OnRequestProcessed;
+    }
+
+    private string GetGlobalizedAuthPath()
+    {
+        var dir = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        return Path.Combine(dir, $"TwitchApi-{applicationId}", "twitch_auth.json");
     }
 
     private void OnRequestProcessed(HttpRequestMessage request, TwitchResponse response)
@@ -79,7 +86,7 @@ public class TwitchClient
                     if (validateTokenResponse.IsSuccessStatusCode)
                     {
                         isTokenValid = true;
-                        broadcasterUser = (await httpClient.GetUsers(authToken.AccessToken, logins: [broadcasterLogin])).Data.First();
+                        broadcasterUser = (await httpClient.GetUsers(authToken.AccessToken, logins: [channelName])).Data.First();
 
                         try
                         {
@@ -194,18 +201,32 @@ public class TwitchClient
         _ = httpClient.SubscribeToChannelChatMessage(token.AccessToken, broadcasterUser.Id, sessionId);
     }
 
-    private async Task<AuthToken> GetAuthToken()
+    private async Task<AuthInfo> GetAuthToken()
     {
-        if (File.Exists(cachedBearerTokenGlobalizedPath))
+        if (File.Exists(GetGlobalizedAuthPath()))
         {
-            var localJson = File.ReadAllText(cachedBearerTokenGlobalizedPath);
+            var localJson = File.ReadAllText(GetGlobalizedAuthPath());
 
             try
             {
-                var localToken = JsonSerializer.Deserialize<AuthToken>(localJson);
+                var cachedAuthInfo = JsonSerializer.Deserialize<AuthInfo>(localJson);
 
-                if (localToken?.ExpirationDate > DateTimeOffset.UtcNow.AddMinutes(5))
-                    return localToken;
+                if (cachedAuthInfo is not null)
+                {
+                    if (cachedAuthInfo.ExpirationDate > DateTimeOffset.UtcNow.AddMinutes(5))
+                        return cachedAuthInfo;
+                    else
+                    {
+                        Console.WriteLine("Refreshing auth token");
+
+                        var refreshedAuthInfo = await httpClient.RefreshAuthToken(deviceCodeResponse.DeviceCode, cachedAuthInfo.RefreshToken);
+                        var refreshedToken = new AuthInfo(refreshedAuthInfo.AccessToken, refreshedAuthInfo.RefreshToken, deviceCodeResponse.DeviceCode, refreshedAuthInfo.ExpiresIn);
+
+                        SaveAuthInfo(refreshedToken);
+
+                        return refreshedToken;
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -227,11 +248,21 @@ public class TwitchClient
             return null;
         }
 
-        var token = new AuthToken(tokenResponse.AccessToken, tokenResponse.ExpiresIn);
-        var tokenJson = JsonSerializer.Serialize(token);
+        var token = new AuthInfo(tokenResponse.AccessToken, tokenResponse.RefreshToken, deviceCodeResponse.DeviceCode, tokenResponse.ExpiresIn);
 
-        File.WriteAllText(cachedBearerTokenGlobalizedPath, tokenJson);
+        SaveAuthInfo(token);
 
         return token;
+    }
+
+    private void SaveAuthInfo(AuthInfo authInfo)
+    {
+        Console.WriteLine($"Saving auth info to {GetGlobalizedAuthPath()}");
+
+        var authJson = JsonSerializer.Serialize(authInfo);
+
+        Directory.CreateDirectory(Path.GetDirectoryName(GetGlobalizedAuthPath())!);
+
+        File.WriteAllText(GetGlobalizedAuthPath(), authJson);
     }
 }

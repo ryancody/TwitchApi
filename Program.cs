@@ -17,16 +17,16 @@ if (string.IsNullOrWhiteSpace(clientInfoString))
     return;
 }
 
-var clientInfo = JsonSerializer.Deserialize<TwitchApi.Models.AppInfo>(clientInfoString);
+var clientInfo = JsonSerializer.Deserialize<AppInfo>(clientInfoString);
 
 ArgumentNullException.ThrowIfNull(clientInfo);
 
-client = new TwitchClient(clientInfo, "");
+client = new TwitchClient(clientInfo);
 client.MessageReceived += (Event @event) =>
 {
     Console.WriteLine($"Received {@event.MessageType}");
 };
 
-client.ConnectAsync().GetAwaiter().GetResult();
+await client.ConnectAsync();
 
 await Task.Delay(-1);

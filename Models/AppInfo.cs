@@ -6,4 +6,7 @@ public class AppInfo
 {
     [JsonPropertyName("id")]
     public string Id { get; set; } = string.Empty;
+
+    [JsonPropertyName("channel")]
+    public string Channel { get; set; } = string.Empty;
 }

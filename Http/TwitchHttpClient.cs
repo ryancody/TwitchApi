@@ -58,6 +58,27 @@ public class TwitchHttpClient : HttpClient
         return SendRequestAsync<TokenResponse>(httpRequest);
     }
 
+    internal Task<TokenResponse> RefreshAuthToken(string deviceCode, string refreshToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(deviceCode);
+
+        var httpRequest = new HttpRequestMessage
+        {
+            Method = HttpMethod.Post,
+            RequestUri = new Uri("https://id.twitch.tv/oauth2/token?"),
+            Content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["client_id"] = clientInfo.Id,
+                ["scopes"] = scopes,
+                ["device_code"] = deviceCode,
+                ["grant_type"] = "refresh_token",
+                ["refresh_token"] = refreshToken
+            })
+        };
+
+        return SendRequestAsync<TokenResponse>(httpRequest);
+    }
+
     internal Task<SubscribeResponse> SubscribeToChannelUpdate(string token, string broadcasterUserId, string sessionId)
     {
         var httpRequestMessage = new HttpRequestMessage
@@ -131,16 +152,22 @@ public class TwitchHttpClient : HttpClient
 
     internal Task<UsersResponse> GetUsers(string token, string[] logins = null, string[] ids = null)
     {
-        if (!logins.Any() && !ids.Any())
-            throw new ArgumentNullException("At least 1 login or ID must be provided to GetUsers");
+        if (logins?.Length <= 0 && ids?.Length <= 0)
+            throw new ArgumentException("Need at least 1 login or id to GetUsers");
 
-        var loginList = logins.Select(l => $"login={l}");
-        var idList = ids.Select(i => $"id={i}");
-        var parameters = string.Join("&", loginList, idList);
+        var queryParts = new List<string>();
+
+        if (logins?.Length > 0)
+            queryParts.AddRange(logins.Select(l => $"login={Uri.EscapeDataString(l)}"));
+
+        if (ids?.Length > 0)
+            queryParts.AddRange(ids.Select(id => $"id={Uri.EscapeDataString(id)}"));
+
+        var query = string.Join("&", queryParts);
         var httpRequest = new HttpRequestMessage
         {
             Method = HttpMethod.Get,
-            RequestUri = new Uri($"https://api.twitch.tv/helix/users?{parameters}"),
+            RequestUri = new Uri($"https://api.twitch.tv/helix/users?{query}"),
             Headers =
             {
                 { "Client-ID", clientInfo.Id },
