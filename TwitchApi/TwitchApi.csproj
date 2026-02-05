@@ -7,7 +7,7 @@
     <Nullable>disable</Nullable>
     <UserSecretsId>71628e4b-53f9-40dc-bb1c-b5db0c8c5741</UserSecretsId>
     <PackageId>TwitchApi</PackageId>
-    <Version>0.1.2</Version>
+    <Version>0.1.3</Version>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
   </PropertyGroup>
 
