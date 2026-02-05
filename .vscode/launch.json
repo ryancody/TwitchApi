@@ -6,7 +6,7 @@
       "type": "coreclr",
       "request": "launch",
       "preLaunchTask": "build",
-      "program": "${workspaceFolder}/TwitchApi.Cli/bin/Debug/net9.0/TwitchApi.Cli.dll",
+      "program": "${workspaceFolder}/TwitchApi.Cli/bin/Debug/net8.0/TwitchApi.Cli.dll",
       "args": [],
       "cwd": "${workspaceFolder}/TwitchApi.Cli",
       "console": "internalConsole",
