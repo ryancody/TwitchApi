@@ -1,6 +1,7 @@
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using TwitchApi.Models;
 
 namespace TwitchApi;
@@ -17,17 +18,19 @@ public class TwitchClient
     private readonly string applicationId;
     private User broadcasterUser;
     private DeviceCodeResponse deviceCodeResponse;
+    private ILogger<TwitchClient> logger;
 
     private bool isTokenValid = false;
 
     private const int shortValidationTimer = 2000;
 
-    public TwitchClient(AppInfo appInfo)
+    public TwitchClient(AppInfo appInfo, ILogger<TwitchClient> logger)
     {
         webSocket = new ClientWebSocket();
         httpClient = new TwitchHttpClient(appInfo);
         channelName = appInfo.Channel;
         applicationId = appInfo.Id;
+        this.logger = logger;
         httpClient.RequestProcessed += OnRequestProcessed;
     }
 
@@ -53,7 +56,7 @@ public class TwitchClient
         if (token is null)
         {
             deviceCodeResponse = await httpClient.GetDeviceCode();
-            Console.WriteLine("Visit " + deviceCodeResponse.VerificationUri);
+            logger.LogInformation("Visit " + deviceCodeResponse.VerificationUri);
         }
 
         _ = Task.Run(QueryTokenValidation, cts.Token);
@@ -76,7 +79,7 @@ public class TwitchClient
         {
             if (!isTokenValid)
             {
-                Console.WriteLine("checking for valid token...");
+                logger.LogInformation("checking for valid token...");
                 var authToken = await GetAuthToken();
 
                 if (authToken is not null)
@@ -92,17 +95,17 @@ public class TwitchClient
                         {
                             if (webSocket.State != WebSocketState.Open && webSocket.State != WebSocketState.Connecting)
                             {
-                                Console.WriteLine("Validated token, starting websocket...");
+                                logger.LogInformation("Validated token, starting websocket...");
                                 var uri = new Uri("wss://eventsub.wss.twitch.tv/ws");
                                 await webSocket.ConnectAsync(uri, cts.Token);
                             }
                         }
                         catch (Exception e)
                         {
-                            Console.WriteLine("error starting websocket: " + e.Message);
+                            logger.LogInformation("error starting websocket: " + e.Message);
                         }
 
-                        Console.WriteLine("websocket: " + webSocket.State);
+                        logger.LogInformation("websocket: " + webSocket.State);
 
                         await Task.Delay(1000);
                     }
@@ -133,7 +136,7 @@ public class TwitchClient
 
                     if (!string.IsNullOrEmpty(text))
                     {
-                        Console.WriteLine("Received: " + text);
+                        logger.LogInformation("Received: " + text);
                         messageQueue.Enqueue(JsonSerializer.Deserialize<WebSocketMessage>(text));
                     }
                 }
@@ -151,7 +154,7 @@ public class TwitchClient
             {
                 var message = messageQueue.Dequeue();
 
-                Console.WriteLine($"Processing message {message.Metadata.MessageId} of type {message.Metadata.MessageType}");
+                logger.LogInformation($"Processing message {message.Metadata.MessageId} of type {message.Metadata.MessageType}");
                 ProcessMessage(message);
             }
             await Task.Delay(100);
@@ -165,21 +168,21 @@ public class TwitchClient
             case "session_welcome":
                 var sessionId = message.Payload.Session.Id;
 
-                Console.WriteLine($"Session established with ID: {sessionId}");
+                logger.LogInformation($"Session established with ID: {sessionId}");
                 Subscribe(message.Payload.Session.Id);
                 break;
 
             case "notification":
-                Console.WriteLine($"Notification received");
+                logger.LogInformation($"Notification received");
                 ProcessNotification(message);
                 break;
 
             case "session_keepalive":
-                Console.WriteLine("keepalive received.");
+                logger.LogInformation("keepalive received.");
                 break;
 
             default:
-                Console.WriteLine($"Unknown message type: {message.Metadata.MessageType}");
+                logger.LogInformation($"Unknown message type: {message.Metadata.MessageType}");
                 break;
         }
     }
@@ -188,7 +191,7 @@ public class TwitchClient
     {
         var eventData = message.Payload.Event;
 
-        Console.WriteLine($"Event received: Broadcaster {eventData.BroadcasterUserName}, Chatter {eventData.ChatterUserName}, Message: {eventData.Message.Text}");
+        logger.LogInformation($"Event received: Broadcaster {eventData.BroadcasterUserName}, Chatter {eventData.ChatterUserName}, Message: {eventData.Message.Text}");
 
         MessageReceived?.Invoke(eventData);
     }
@@ -217,7 +220,7 @@ public class TwitchClient
                         return cachedAuthInfo;
                     else
                     {
-                        Console.WriteLine("Refreshing auth token");
+                        logger.LogInformation("Refreshing auth token");
 
                         var refreshedAuthInfo = await httpClient.RefreshAuthToken(deviceCodeResponse.DeviceCode, cachedAuthInfo.RefreshToken);
                         var refreshedToken = new AuthInfo(refreshedAuthInfo.AccessToken, refreshedAuthInfo.RefreshToken, deviceCodeResponse.DeviceCode, refreshedAuthInfo.ExpiresIn);
@@ -230,13 +233,13 @@ public class TwitchClient
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Unable to deserialize cached token: {ex.Message}");
+                logger.LogInformation($"Unable to deserialize cached token: {ex.Message}");
             }
         }
 
         if (deviceCodeResponse?.DeviceCode is null)
         {
-            Console.WriteLine("device code missing");
+            logger.LogInformation("device code missing");
             return null;
         }
 
@@ -244,7 +247,7 @@ public class TwitchClient
 
         if (!tokenResponse.IsSuccessStatusCode)
         {
-            Console.WriteLine("Message: " + tokenResponse.Message);
+            logger.LogInformation("Message: " + tokenResponse.Message);
             return null;
         }
 
@@ -257,7 +260,7 @@ public class TwitchClient
 
     private void SaveAuthInfo(AuthInfo authInfo)
     {
-        Console.WriteLine($"Saving auth info to {GetGlobalizedAuthPath()}");
+        logger.LogInformation($"Saving auth info to {GetGlobalizedAuthPath()}");
 
         var authJson = JsonSerializer.Serialize(authInfo);
 

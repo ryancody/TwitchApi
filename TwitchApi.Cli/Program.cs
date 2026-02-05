@@ -9,7 +9,7 @@ Console.WriteLine("Running...");
 
 TwitchClient client;
 
-var clientInfoString = File.ReadAllText("twitch_client_info.json")?.Trim();
+var clientInfoString = File.ReadAllText("../twitch_client_info.json")?.Trim();
 
 if (string.IsNullOrWhiteSpace(clientInfoString))
 {
@@ -21,7 +21,7 @@ var clientInfo = JsonSerializer.Deserialize<AppInfo>(clientInfoString);
 
 ArgumentNullException.ThrowIfNull(clientInfo);
 
-client = new TwitchClient(clientInfo);
+client = new TwitchClient(clientInfo, new Logger());
 client.MessageReceived += (Event @event) =>
 {
     Console.WriteLine($"Received {@event.MessageType}");
