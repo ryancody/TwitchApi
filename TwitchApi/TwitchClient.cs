@@ -8,28 +8,29 @@ namespace TwitchApi;
 
 public class TwitchClient
 {
-    public event Action<Models.Event> MessageReceived;
+    public event Action<Event> MessageReceived;
+    public event Action<bool> ConnectionChanged;
+    public event Action<string> DeviceAuthorizationRequested;
+    public bool IsConnected => isTokenValid;
 
     private ClientWebSocket webSocket;
     private TwitchHttpClient httpClient;
     private CancellationTokenSource cts = new CancellationTokenSource();
     private Queue<WebSocketMessage> messageQueue = [];
     private readonly string channelName;
-    private readonly string applicationId;
+    private readonly string appId;
     private User broadcasterUser;
     private DeviceCodeResponse deviceCodeResponse;
     private ILogger<TwitchClient> logger;
-
     private bool isTokenValid = false;
-
     private const int shortValidationTimer = 2000;
 
-    public TwitchClient(AppInfo appInfo, ILogger<TwitchClient> logger)
+    public TwitchClient(string channelName, string appId, ILogger<TwitchClient> logger)
     {
         webSocket = new ClientWebSocket();
-        httpClient = new TwitchHttpClient(appInfo);
-        channelName = appInfo.Channel;
-        applicationId = appInfo.Id;
+        httpClient = new TwitchHttpClient(appId);
+        this.channelName = channelName;
+        this.appId = appId;
         this.logger = logger;
         httpClient.RequestProcessed += OnRequestProcessed;
     }
@@ -37,7 +38,7 @@ public class TwitchClient
     private string GetGlobalizedAuthPath()
     {
         var dir = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        return Path.Combine(dir, $"TwitchApi-{applicationId}", "twitch_auth.json");
+        return Path.Combine(dir, $"TwitchApi-{appId}", "twitch_auth.json");
     }
 
     private void OnRequestProcessed(HttpRequestMessage request, TwitchResponse response)
@@ -46,6 +47,7 @@ public class TwitchClient
             && response.Message.Equals("authorization_pending", StringComparison.OrdinalIgnoreCase))
         {
             isTokenValid = false;
+            ConnectionChanged?.Invoke(isTokenValid);
         }
     }
 
@@ -56,7 +58,8 @@ public class TwitchClient
         if (token is null)
         {
             deviceCodeResponse = await httpClient.GetDeviceCode();
-            logger.LogInformation("Visit " + deviceCodeResponse.VerificationUri);
+            logger.LogInformation("Verify device at " + deviceCodeResponse.VerificationUri);
+            DeviceAuthorizationRequested?.Invoke(deviceCodeResponse.VerificationUri);
         }
 
         _ = Task.Run(QueryTokenValidation, cts.Token);
@@ -73,6 +76,9 @@ public class TwitchClient
         return !string.IsNullOrWhiteSpace(subscriber?.PlanName);
     }
 
+    public async Task<ValidateTokenResponse> ValidateTokenAsync(string token) =>
+        await httpClient.ValidateTokenAsync(token);
+
     private async Task QueryTokenValidation()
     {
         while (!cts.IsCancellationRequested)
@@ -84,11 +90,12 @@ public class TwitchClient
 
                 if (authToken is not null)
                 {
-                    var validateTokenResponse = await httpClient.ValidateToken(authToken.AccessToken);
+                    var validateTokenResponse = await httpClient.ValidateTokenAsync(authToken.AccessToken);
 
                     if (validateTokenResponse.IsSuccessStatusCode)
                     {
                         isTokenValid = true;
+                        ConnectionChanged?.Invoke(isTokenValid);
                         broadcasterUser = (await httpClient.GetUsers(authToken.AccessToken, logins: [channelName])).Data.First();
 
                         try
@@ -221,6 +228,9 @@ public class TwitchClient
                     else
                     {
                         logger.LogInformation("Refreshing auth token");
+
+                        if (deviceCodeResponse is null)
+                            return null;
 
                         var refreshedAuthInfo = await httpClient.RefreshAuthToken(deviceCodeResponse.DeviceCode, cachedAuthInfo.RefreshToken);
                         var refreshedToken = new AuthInfo(refreshedAuthInfo.AccessToken, refreshedAuthInfo.RefreshToken, deviceCodeResponse.DeviceCode, refreshedAuthInfo.ExpiresIn);

@@ -11,15 +11,15 @@ public class TwitchHttpClient : HttpClient
 {
     internal Action<HttpRequestMessage, TwitchResponse> RequestProcessed;
 
-    private AppInfo clientInfo;
+    private string appId;
     private const string scopes = "user:read:chat channel:read:subscriptions";
     private readonly Dictionary<string, BroadcasterSubsciptionResponse> broadcasterSubscriptions = [];
 
-    public TwitchHttpClient(AppInfo clientInfo) : base()
+    public TwitchHttpClient(string appId) : base()
     {
-        ArgumentNullException.ThrowIfNull(clientInfo, nameof(clientInfo));
+        ArgumentNullException.ThrowIfNull(appId, nameof(appId));
 
-        this.clientInfo = clientInfo;
+        this.appId = appId;
     }
 
     internal Task<DeviceCodeResponse> GetDeviceCode()
@@ -30,7 +30,7 @@ public class TwitchHttpClient : HttpClient
             RequestUri = new Uri("https://id.twitch.tv/oauth2/device?"),
             Content = new FormUrlEncodedContent(new Dictionary<string, string>
             {
-                ["client_id"] = clientInfo.Id,
+                ["client_id"] = appId,
                 ["scopes"] = scopes
             })
         };
@@ -48,7 +48,7 @@ public class TwitchHttpClient : HttpClient
             RequestUri = new Uri("https://id.twitch.tv/oauth2/token?"),
             Content = new FormUrlEncodedContent(new Dictionary<string, string>
             {
-                ["client_id"] = clientInfo.Id,
+                ["client_id"] = appId,
                 ["scopes"] = scopes,
                 ["device_code"] = deviceCode,
                 ["grant_type"] = "urn:ietf:params:oauth:grant-type:device_code"
@@ -68,7 +68,7 @@ public class TwitchHttpClient : HttpClient
             RequestUri = new Uri("https://id.twitch.tv/oauth2/token?"),
             Content = new FormUrlEncodedContent(new Dictionary<string, string>
             {
-                ["client_id"] = clientInfo.Id,
+                ["client_id"] = appId,
                 ["scopes"] = scopes,
                 ["device_code"] = deviceCode,
                 ["grant_type"] = "refresh_token",
@@ -87,7 +87,7 @@ public class TwitchHttpClient : HttpClient
             RequestUri = new Uri("https://api.twitch.tv/helix/eventsub/subscriptions"),
             Headers =
             {
-                { "Client-ID", clientInfo.Id },
+                { "Client-ID", appId },
                 { "Authorization", $"Bearer {token}" }
             },
             Content = new StringContent(
@@ -122,7 +122,7 @@ public class TwitchHttpClient : HttpClient
             RequestUri = new Uri("https://api.twitch.tv/helix/eventsub/subscriptions"),
             Headers =
             {
-                { "Client-ID", clientInfo.Id },
+                { "Client-ID", appId },
                 { "Authorization", $"Bearer {token}" }
             },
             Content = new StringContent(
@@ -170,15 +170,13 @@ public class TwitchHttpClient : HttpClient
             RequestUri = new Uri($"https://api.twitch.tv/helix/users?{query}"),
             Headers =
             {
-                { "Client-ID", clientInfo.Id },
+                { "Client-ID", appId },
                 { "Authorization", $"Bearer {token}" }
             }
         };
 
         return SendRequestAsync<UsersResponse>(httpRequest);
     }
-
-
 
     internal async Task<BroadcasterSubsciptionResponse> GetBroadcasterSubscriptions(string token, string broadcasterUserId, string chatterUserId)
     {
@@ -196,7 +194,7 @@ public class TwitchHttpClient : HttpClient
             RequestUri = new Uri(url),
             Headers =
             {
-                { "Client-ID", clientInfo.Id },
+                { "Client-ID", appId },
                 { "Authorization", $"Bearer {token}" }
             }
         };
@@ -209,7 +207,7 @@ public class TwitchHttpClient : HttpClient
         return broadcasterSubscriptionsResponse;
     }
 
-    internal async Task<ValidateTokenResponse> ValidateToken(string token)
+    public async Task<ValidateTokenResponse> ValidateTokenAsync(string token)
     {
         var httpRequest = new HttpRequestMessage
         {

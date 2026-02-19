@@ -16,12 +16,16 @@ if (string.IsNullOrWhiteSpace(clientInfoString))
     Console.WriteLine("Twitch client info not found");
     return;
 }
+    
+var appInfo = JsonDocument.Parse(clientInfoString);
 
-var clientInfo = JsonSerializer.Deserialize<AppInfo>(clientInfoString);
+var channel = appInfo.RootElement.GetProperty("channel").GetString();
+var id = appInfo.RootElement.GetProperty("id").GetString();
 
-ArgumentNullException.ThrowIfNull(clientInfo);
+ArgumentNullException.ThrowIfNull(channel);
+ArgumentNullException.ThrowIfNull(id);
 
-client = new TwitchClient(clientInfo, new Logger());
+client = new TwitchClient(channel, id, new Logger());
 client.MessageReceived += (Event @event) =>
 {
     Console.WriteLine($"Received {@event.MessageType}");
