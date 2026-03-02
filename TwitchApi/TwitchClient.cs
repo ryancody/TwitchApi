@@ -11,18 +11,21 @@ public class TwitchClient
     public event Action<Event> MessageReceived;
     public event Action<bool> ConnectionChanged;
     public event Action<string> DeviceAuthorizationRequested;
+    public event Action<string> TokenChanged;
     public bool IsConnected => isTokenValid;
+    public LoginInfo LoginInfo { get; private set; }
 
     private ClientWebSocket webSocket;
     private TwitchHttpClient httpClient;
+    private ILogger<TwitchClient> logger;
     private CancellationTokenSource cts = new CancellationTokenSource();
     private Queue<WebSocketMessage> messageQueue = [];
-    private readonly string channelName;
-    private readonly string appId;
     private User broadcasterUser;
     private DeviceCodeResponse deviceCodeResponse;
-    private ILogger<TwitchClient> logger;
+    private readonly string channelName;
+    private readonly string appId;
     private bool isTokenValid = false;
+    private string token = string.Empty;
     private const int shortValidationTimer = 2000;
 
     public TwitchClient(string channelName, string appId, ILogger<TwitchClient> logger)
@@ -33,13 +36,10 @@ public class TwitchClient
         this.appId = appId;
         this.logger = logger;
         httpClient.RequestProcessed += OnRequestProcessed;
+        httpClient.LoginInfoValidated += OnLoginInfoValidated;
     }
 
-    private string GetGlobalizedAuthPath()
-    {
-        var dir = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        return Path.Combine(dir, $"TwitchApi-{appId}", "twitch_auth.json");
-    }
+    private void OnLoginInfoValidated(LoginInfo info) => LoginInfo = info;
 
     private void OnRequestProcessed(HttpRequestMessage request, TwitchResponse response)
     {
@@ -53,7 +53,7 @@ public class TwitchClient
 
     public async Task ConnectAsync()
     {
-        var token = await GetAuthToken();
+        var token = await GetAuthInfo();
 
         if (token is null)
         {
@@ -67,9 +67,19 @@ public class TwitchClient
         _ = Task.Run(ProcessMessages, cts.Token);
     }
 
+    public async Task<UsersResponse> GetUsers(string[] logins = null, string[] ids = null)
+    {
+        var token = await GetAuthInfo();
+
+        if (token is null)
+            throw new Exception("No valid token available");
+
+        return await httpClient.GetUsers(token.AccessToken, logins, ids);
+    }
+
     public async Task<bool> IsUserSubscribed(string chatterUserId)
     {
-        var token = await GetAuthToken();
+        var token = await GetAuthInfo();
         var broadcasterSubsciptionResponse = await httpClient.GetBroadcasterSubscriptions(token.AccessToken, broadcasterUser.Id, chatterUserId);
         var subscriber = broadcasterSubsciptionResponse?.Data.FirstOrDefault();
 
@@ -86,7 +96,7 @@ public class TwitchClient
             if (!isTokenValid)
             {
                 logger.LogInformation("checking for valid token...");
-                var authToken = await GetAuthToken();
+                var authToken = await GetAuthInfo();
 
                 if (authToken is not null)
                 {
@@ -96,8 +106,8 @@ public class TwitchClient
                     {
                         isTokenValid = true;
                         ConnectionChanged?.Invoke(isTokenValid);
+                        TokenChanged?.Invoke(authToken.AccessToken);
                         broadcasterUser = (await httpClient.GetUsers(authToken.AccessToken, logins: [channelName])).Data.First();
-
                         try
                         {
                             if (webSocket.State != WebSocketState.Open && webSocket.State != WebSocketState.Connecting)
@@ -205,51 +215,49 @@ public class TwitchClient
 
     private async void Subscribe(string sessionId)
     {
-        var token = await GetAuthToken();
+        var token = await GetAuthInfo();
 
         _ = httpClient.SubscribeToChannelUpdate(token.AccessToken, broadcasterUser.Id, sessionId);
         _ = httpClient.SubscribeToChannelChatMessage(token.AccessToken, broadcasterUser.Id, sessionId);
     }
 
-    private async Task<AuthInfo> GetAuthToken()
+    private async Task<AuthInfo> GetAuthInfo()
     {
         if (File.Exists(GetGlobalizedAuthPath()))
         {
-            var localJson = File.ReadAllText(GetGlobalizedAuthPath());
+            AuthInfo cachedAuthInfo = null;
 
             try
             {
-                var cachedAuthInfo = JsonSerializer.Deserialize<AuthInfo>(localJson);
-
-                if (cachedAuthInfo is not null)
-                {
-                    if (cachedAuthInfo.ExpirationDate > DateTimeOffset.UtcNow.AddMinutes(5))
-                        return cachedAuthInfo;
-                    else
-                    {
-                        logger.LogInformation("Refreshing auth token");
-
-                        if (deviceCodeResponse is null)
-                            return null;
-
-                        var refreshedAuthInfo = await httpClient.RefreshAuthToken(deviceCodeResponse.DeviceCode, cachedAuthInfo.RefreshToken);
-                        var refreshedToken = new AuthInfo(refreshedAuthInfo.AccessToken, refreshedAuthInfo.RefreshToken, deviceCodeResponse.DeviceCode, refreshedAuthInfo.ExpiresIn);
-
-                        SaveAuthInfo(refreshedToken);
-
-                        return refreshedToken;
-                    }
-                }
+                var localJson = File.ReadAllText(GetGlobalizedAuthPath());
+                cachedAuthInfo = JsonSerializer.Deserialize<AuthInfo>(localJson);
             }
             catch (Exception ex)
             {
                 logger.LogInformation($"Unable to deserialize cached token: {ex.Message}");
             }
+
+            if (cachedAuthInfo is not null)
+            {
+                if (cachedAuthInfo.ExpirationDate > DateTimeOffset.UtcNow.AddMinutes(5))
+                    return cachedAuthInfo;
+                else
+                {
+                    logger.LogInformation("Refreshing auth token");
+
+                    var refreshedAuthInfo = await httpClient.RefreshAuthToken(cachedAuthInfo.RefreshToken);
+                    var refreshedToken = new AuthInfo(refreshedAuthInfo.AccessToken, refreshedAuthInfo.RefreshToken, refreshedAuthInfo.ExpiresIn);
+
+                    SaveAuthInfo(refreshedToken);
+
+                    return refreshedToken;
+                }
+            }
         }
 
         if (deviceCodeResponse?.DeviceCode is null)
         {
-            logger.LogInformation("device code missing");
+            logger.LogInformation("Unable to get AuthInfo: Device code missing");
             return null;
         }
 
@@ -261,11 +269,17 @@ public class TwitchClient
             return null;
         }
 
-        var token = new AuthInfo(tokenResponse.AccessToken, tokenResponse.RefreshToken, deviceCodeResponse.DeviceCode, tokenResponse.ExpiresIn);
+        var token = new AuthInfo(tokenResponse.AccessToken, tokenResponse.RefreshToken, tokenResponse.ExpiresIn);
 
         SaveAuthInfo(token);
 
         return token;
+    }
+
+    private string GetGlobalizedAuthPath()
+    {
+        var dir = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        return Path.Combine(dir, $"TwitchApi-{appId}", "twitch_auth.json");
     }
 
     private void SaveAuthInfo(AuthInfo authInfo)
@@ -275,7 +289,6 @@ public class TwitchClient
         var authJson = JsonSerializer.Serialize(authInfo);
 
         Directory.CreateDirectory(Path.GetDirectoryName(GetGlobalizedAuthPath())!);
-
         File.WriteAllText(GetGlobalizedAuthPath(), authJson);
     }
 }

@@ -10,6 +10,7 @@ namespace TwitchApi;
 public class TwitchHttpClient : HttpClient
 {
     internal Action<HttpRequestMessage, TwitchResponse> RequestProcessed;
+    internal Action<LoginInfo> LoginInfoValidated;
 
     private string appId;
     private const string scopes = "user:read:chat channel:read:subscriptions";
@@ -58,9 +59,9 @@ public class TwitchHttpClient : HttpClient
         return SendRequestAsync<TokenResponse>(httpRequest);
     }
 
-    internal Task<TokenResponse> RefreshAuthToken(string deviceCode, string refreshToken)
+    internal Task<TokenResponse> RefreshAuthToken(string refreshToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(deviceCode);
+        ArgumentException.ThrowIfNullOrWhiteSpace(refreshToken);
 
         var httpRequest = new HttpRequestMessage
         {
@@ -69,8 +70,6 @@ public class TwitchHttpClient : HttpClient
             Content = new FormUrlEncodedContent(new Dictionary<string, string>
             {
                 ["client_id"] = appId,
-                ["scopes"] = scopes,
-                ["device_code"] = deviceCode,
                 ["grant_type"] = "refresh_token",
                 ["refresh_token"] = refreshToken
             })
@@ -150,6 +149,7 @@ public class TwitchHttpClient : HttpClient
         return SendRequestAsync<SubscribeResponse>(httpRequestMessage);
     }
 
+    // get info about one ore more users
     internal Task<UsersResponse> GetUsers(string token, string[] logins = null, string[] ids = null)
     {
         if (logins?.Length <= 0 && ids?.Length <= 0)
@@ -220,6 +220,12 @@ public class TwitchHttpClient : HttpClient
         };
 
         var validateTokenResponse = await SendRequestAsync<ValidateTokenResponse>(httpRequest);
+
+        LoginInfoValidated?.Invoke(new LoginInfo
+        {
+            Login = validateTokenResponse.Login,
+            UserId = validateTokenResponse.UserId
+        });
 
         return validateTokenResponse;
     }

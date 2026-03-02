@@ -9,7 +9,7 @@ Console.WriteLine("Running...");
 
 TwitchClient client;
 
-var clientInfoString = File.ReadAllText("../twitch_client_info.json")?.Trim();
+var clientInfoString = File.ReadAllText("twitch_client_info.json")?.Trim();
 
 if (string.IsNullOrWhiteSpace(clientInfoString))
 {
