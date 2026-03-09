@@ -22,5 +22,10 @@ jobs:
       - name: Pack
         run: dotnet pack --configuration Release --no-build
 
+      - name: dotnet restore
+        run: |
+          dotnet --version
+          dotnet restore .
+
       - name: Publish
         run: dotnet nuget push "**/*.nupkg" --source "github" --api-key ${{ secrets.GITHUB_TOKEN }}
