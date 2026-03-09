@@ -16,14 +16,14 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: dotnet restore
-        run: |
-          dotnet --version
-          dotnet restore .
-
-
       - name: Add GitHub Packages source
         run: dotnet nuget add source --username ryancody --password ${{ secrets.GITHUB_TOKEN }} --store-password-in-clear-text --name github "https://nuget.pkg.github.com/ryancody/index.json"
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --configuration Release --no-incremental
 
       - name: Pack
         run: dotnet pack --configuration Release --no-build
