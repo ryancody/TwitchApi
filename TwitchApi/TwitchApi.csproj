@@ -6,8 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>disable</Nullable>
     <UserSecretsId>71628e4b-53f9-40dc-bb1c-b5db0c8c5741</UserSecretsId>
-    <PackageId> ryancody.TwitchApi</PackageId>
-    <Version>0.2.0</Version>
+    <PackageId> olgodev.TwitchApi</PackageId>
+    <Version>0.2.1</Version>
     <RepositoryUrl>https://github.com/ryancody/TwitchApi</RepositoryUrl>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
   </PropertyGroup>
