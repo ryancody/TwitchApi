@@ -11,7 +11,7 @@ public class TwitchClient
     public event Action<Event> MessageReceived;
     public event Action<bool> ConnectionChanged;
     public event Action<string> DeviceAuthorizationRequested;
-    public event Action<string> TokenChanged;
+    public event Action<string> TokenValidated;
     public bool IsConnected => isTokenValid;
     public LoginInfo LoginInfo { get; private set; }
 
@@ -25,7 +25,6 @@ public class TwitchClient
     private readonly string channelName;
     private readonly string appId;
     private bool isTokenValid = false;
-    private string token = string.Empty;
     private const int shortValidationTimer = 2000;
 
     public TwitchClient(string channelName, string appId, ILogger<TwitchClient> logger, bool attemptAutoLogin = false)
@@ -37,6 +36,11 @@ public class TwitchClient
         this.logger = logger;
         httpClient.RequestProcessed += OnRequestProcessed;
         httpClient.LoginInfoValidated += OnLoginInfoValidated;
+
+        httpClient.TokenValidated += (token) =>
+        {
+            TokenValidated?.Invoke(token);
+        };
 
         if (attemptAutoLogin)
             _ = AttemptAutoLogin();
@@ -117,7 +121,6 @@ public class TwitchClient
                     {
                         isTokenValid = true;
                         ConnectionChanged?.Invoke(isTokenValid);
-                        TokenChanged?.Invoke(authToken.AccessToken);
                         broadcasterUser = (await httpClient.GetUsers(authToken.AccessToken, logins: [channelName])).Data.First();
                         try
                         {

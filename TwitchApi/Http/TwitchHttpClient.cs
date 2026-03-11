@@ -11,6 +11,7 @@ public class TwitchHttpClient : HttpClient
 {
     internal Action<HttpRequestMessage, TwitchResponse> RequestProcessed;
     internal Action<LoginInfo> LoginInfoValidated;
+    internal Action<string> TokenValidated;
 
     private string appId;
     private const string scopes = "user:read:chat channel:read:subscriptions";
@@ -226,6 +227,8 @@ public class TwitchHttpClient : HttpClient
             Login = validateTokenResponse.Login,
             UserId = validateTokenResponse.UserId
         });
+
+        TokenValidated?.Invoke(token);
 
         return validateTokenResponse;
     }
