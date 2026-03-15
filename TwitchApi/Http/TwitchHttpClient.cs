@@ -228,7 +228,8 @@ public class TwitchHttpClient : HttpClient
             UserId = validateTokenResponse.UserId
         });
 
-        TokenValidated?.Invoke(token);
+        if (validateTokenResponse.IsSuccessStatusCode)
+            TokenValidated?.Invoke(token);
 
         return validateTokenResponse;
     }
