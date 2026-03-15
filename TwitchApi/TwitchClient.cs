@@ -27,7 +27,7 @@ public class TwitchClient
     private bool isTokenValid = false;
     private const int shortValidationTimer = 2000;
 
-    public TwitchClient(string channelName, string appId, ILogger<TwitchClient> logger, bool attemptAutoLogin = false)
+    public TwitchClient(string channelName, string appId, ILogger<TwitchClient> logger)
     {
         webSocket = new ClientWebSocket();
         httpClient = new TwitchHttpClient(appId);
@@ -37,21 +37,7 @@ public class TwitchClient
         httpClient.RequestProcessed += OnRequestProcessed;
         httpClient.LoginInfoValidated += OnLoginInfoValidated;
 
-        httpClient.TokenValidated += (token) =>
-        {
-            TokenValidated?.Invoke(token);
-        };
-
-        if (attemptAutoLogin)
-            _ = AttemptAutoLogin();
-    }
-
-    private async Task AttemptAutoLogin()
-    {
-        var token = await GetAuthInfo();
-
-        if (token is not null)
-            await ConnectAsync();
+        httpClient.TokenValidated += token => TokenValidated?.Invoke(token);
     }
 
     private void OnLoginInfoValidated(LoginInfo info) => LoginInfo = info;
