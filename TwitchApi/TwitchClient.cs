@@ -9,10 +9,10 @@ namespace TwitchApi;
 public class TwitchClient
 {
     public event Action<Event> MessageReceived;
-    public event Action<bool> ConnectionChanged;
+    public event Action<ConnectionStatus> ConnectionStatusChanged;
     public event Action<string> DeviceAuthorizationRequested;
     public event Action<string> TokenValidated;
-    public bool IsConnected => isTokenValid;
+    public ConnectionStatus ConnectionStatus { get; private set; } = ConnectionStatus.Disconnected;
     public LoginInfo LoginInfo { get; private set; }
 
     private ClientWebSocket webSocket;
@@ -37,7 +37,11 @@ public class TwitchClient
         httpClient.RequestProcessed += OnRequestProcessed;
         httpClient.LoginInfoValidated += OnLoginInfoValidated;
 
-        httpClient.TokenValidated += token => TokenValidated?.Invoke(token);
+        httpClient.TokenValidated += token => 
+        {
+            ConnectionStatus = ConnectionStatus.Connected;
+            TokenValidated?.Invoke(token);
+        };
     }
 
     private void OnLoginInfoValidated(LoginInfo info) => LoginInfo = info;
@@ -48,15 +52,27 @@ public class TwitchClient
             && response.Message.Equals("authorization_pending", StringComparison.OrdinalIgnoreCase))
         {
             isTokenValid = false;
-            ConnectionChanged?.Invoke(isTokenValid);
+
+            if (ConnectionStatus != ConnectionStatus.Pending)
+            {
+                ConnectionStatus = ConnectionStatus.Pending;
+                ConnectionStatusChanged?.Invoke(ConnectionStatus);
+            }
         }
     }
 
-    public async Task ConnectAsync()
+    public async Task ConnectAsync(bool skipDeviceCode = false)
     {
+        if (ConnectionStatus != ConnectionStatus.Connecting)
+        {
+            ConnectionStatus = ConnectionStatus.Connecting;
+            ConnectionStatusChanged?.Invoke(ConnectionStatus);
+        }
+
         var token = await GetAuthInfo();
 
-        if (token is null)
+        if (token is null
+            && !skipDeviceCode)
         {
             deviceCodeResponse = await httpClient.GetDeviceCode();
             logger.LogInformation("Verify device at " + deviceCodeResponse.VerificationUri);
@@ -90,6 +106,13 @@ public class TwitchClient
     public async Task<ValidateTokenResponse> ValidateTokenAsync(string token) =>
         await httpClient.ValidateTokenAsync(token);
 
+    public async Task ValidateAuthInfo()
+    {
+        var token = await GetAuthInfo();
+
+        await httpClient.ValidateTokenAsync(token.AccessToken);
+    }
+
     private async Task QueryTokenValidation()
     {
         while (!cts.IsCancellationRequested)
@@ -106,8 +129,8 @@ public class TwitchClient
                     if (validateTokenResponse.IsSuccessStatusCode)
                     {
                         isTokenValid = true;
-                        ConnectionChanged?.Invoke(isTokenValid);
                         broadcasterUser = (await httpClient.GetUsers(authToken.AccessToken, logins: [channelName])).Data.First();
+
                         try
                         {
                             if (webSocket.State != WebSocketState.Open && webSocket.State != WebSocketState.Connecting)
@@ -196,6 +219,11 @@ public class TwitchClient
 
             case "session_keepalive":
                 logger.LogInformation("keepalive received.");
+                if (ConnectionStatus != ConnectionStatus.Connected)
+                {
+                    ConnectionStatus = ConnectionStatus.Connected;
+                    ConnectionStatusChanged?.Invoke(ConnectionStatus);
+                }
                 break;
 
             default:

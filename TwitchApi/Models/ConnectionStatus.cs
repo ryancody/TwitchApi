@@ -4,6 +4,7 @@ public enum ConnectionStatus
 {
     NotSet = 0,
     Disconnected = 1,
-    Connecting = 2,
-    Connected = 3
+    Pending = 2,
+    Connecting = 3,
+    Connected = 4
 }
