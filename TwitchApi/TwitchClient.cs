@@ -12,9 +12,24 @@ public class TwitchClient
     public event Action<ConnectionStatus> ConnectionStatusChanged;
     public event Action<string> DeviceAuthorizationRequested;
     public event Action<string> TokenValidated;
-    public ConnectionStatus ConnectionStatus { get; private set; } = ConnectionStatus.Disconnected;
     public LoginInfo LoginInfo { get; private set; }
+    public ConnectionStatus ConnectionStatus
+    {
+        get
+        {
+            return connectionStatus;
+        }
+        private set
+        {
+            if (connectionStatus != value)
+            {
+                connectionStatus = value;
+                ConnectionStatusChanged?.Invoke(connectionStatus);
+            }
+        }
+    }
 
+    private ConnectionStatus connectionStatus = ConnectionStatus.Disconnected;
     private ClientWebSocket webSocket;
     private TwitchHttpClient httpClient;
     private ILogger<TwitchClient> logger;
@@ -37,7 +52,7 @@ public class TwitchClient
         httpClient.RequestProcessed += OnRequestProcessed;
         httpClient.LoginInfoValidated += OnLoginInfoValidated;
 
-        httpClient.TokenValidated += token => 
+        httpClient.TokenValidated += token =>
         {
             ConnectionStatus = ConnectionStatus.Connected;
             TokenValidated?.Invoke(token);
@@ -52,22 +67,13 @@ public class TwitchClient
             && response.Message.Equals("authorization_pending", StringComparison.OrdinalIgnoreCase))
         {
             isTokenValid = false;
-
-            if (ConnectionStatus != ConnectionStatus.Pending)
-            {
-                ConnectionStatus = ConnectionStatus.Pending;
-                ConnectionStatusChanged?.Invoke(ConnectionStatus);
-            }
+            ConnectionStatus = ConnectionStatus.Pending;
         }
     }
 
     public async Task ConnectAsync(bool skipDeviceCode = false)
     {
-        if (ConnectionStatus != ConnectionStatus.Connecting)
-        {
-            ConnectionStatus = ConnectionStatus.Connecting;
-            ConnectionStatusChanged?.Invoke(ConnectionStatus);
-        }
+        ConnectionStatus = ConnectionStatus.Connecting;
 
         var token = await GetAuthInfo();
 
@@ -219,11 +225,7 @@ public class TwitchClient
 
             case "session_keepalive":
                 logger.LogInformation("keepalive received.");
-                if (ConnectionStatus != ConnectionStatus.Connected)
-                {
-                    ConnectionStatus = ConnectionStatus.Connected;
-                    ConnectionStatusChanged?.Invoke(ConnectionStatus);
-                }
+                ConnectionStatus = ConnectionStatus.Connected;
                 break;
 
             default:
