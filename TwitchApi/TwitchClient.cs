@@ -64,7 +64,7 @@ public class TwitchClient
     private void OnRequestProcessed(HttpRequestMessage request, TwitchResponse response)
     {
         if (response.Status == 400
-            && response.Message.Equals("authorization_pending", StringComparison.OrdinalIgnoreCase))
+            && response.Message.Equals(MessageTypes.AuthorizationPending, StringComparison.OrdinalIgnoreCase))
         {
             isTokenValid = false;
             ConnectionStatus = ConnectionStatus.Pending;
@@ -88,6 +88,18 @@ public class TwitchClient
         _ = Task.Run(QueryTokenValidation, cts.Token);
         _ = Task.Run(Receive, cts.Token);
         _ = Task.Run(ProcessMessages, cts.Token);
+    }
+
+    public async Task DisconnectAsync()
+    {
+        cts.Cancel();
+
+        if (webSocket.State == WebSocketState.Open)
+            await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Client disconnecting", CancellationToken.None);
+
+        ConnectionStatus = ConnectionStatus.Disconnected;
+
+        SaveAuthInfo(null);
     }
 
     public async Task<UsersResponse> GetUsers(string[] logins = null, string[] ids = null)
@@ -211,19 +223,19 @@ public class TwitchClient
     {
         switch (message.Metadata.MessageType)
         {
-            case "session_welcome":
+            case MessageTypes.SessionWelcome:
                 var sessionId = message.Payload.Session.Id;
 
                 logger.LogInformation($"Session established with ID: {sessionId}");
                 Subscribe(message.Payload.Session.Id);
                 break;
 
-            case "notification":
+            case MessageTypes.Notification:
                 logger.LogInformation($"Notification received");
                 ProcessNotification(message);
                 break;
 
-            case "session_keepalive":
+            case MessageTypes.SessionKeepalive:
                 logger.LogInformation("keepalive received.");
                 ConnectionStatus = ConnectionStatus.Connected;
                 break;
