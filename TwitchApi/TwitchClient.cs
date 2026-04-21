@@ -146,6 +146,7 @@ public class TwitchClient
 
                     if (validateTokenResponse.IsSuccessStatusCode)
                     {
+                        ConnectionStatus = ConnectionStatus.Connected;
                         isTokenValid = true;
                         broadcasterUser = (await httpClient.GetUsers(authToken.AccessToken, logins: [channelName])).Data.First();
 
