@@ -44,7 +44,6 @@ public class TwitchClient
 
     public TwitchClient(string channelName, string appId, ILogger<TwitchClient> logger)
     {
-        webSocket = new ClientWebSocket();
         httpClient = new TwitchHttpClient(appId);
         this.channelName = channelName;
         this.appId = appId;
@@ -74,6 +73,13 @@ public class TwitchClient
     public async Task ConnectAsync(bool skipDeviceCode = false)
     {
         ConnectionStatus = ConnectionStatus.Connecting;
+
+        cts.Cancel();
+        cts.Dispose();
+        cts = new CancellationTokenSource();
+        isTokenValid = false;
+        webSocket?.Dispose();
+        webSocket = new ClientWebSocket();
 
         var token = await GetAuthInfo();
 
@@ -127,6 +133,12 @@ public class TwitchClient
     public async Task ValidateAuthInfo()
     {
         var token = await GetAuthInfo();
+
+        if (token is null)
+        {
+            logger.LogInformation("No valid token available for validation");
+            return;
+        }
 
         await httpClient.ValidateTokenAsync(token.AccessToken);
     }
@@ -184,7 +196,20 @@ public class TwitchClient
         {
             if (webSocket.State == WebSocketState.Open)
             {
-                var result = await webSocket.ReceiveAsync(buffer, cts.Token);
+                WebSocketReceiveResult result;
+                try
+                {
+                    result = await webSocket.ReceiveAsync(buffer, cts.Token);
+                }
+                catch (TaskCanceledException)
+                {
+                    // Ignore cancellation exceptions
+                    return;
+                }
+                catch
+                {
+                    throw;
+                }
 
                 sb.Append(Encoding.UTF8.GetString(buffer, 0, result.Count));
 

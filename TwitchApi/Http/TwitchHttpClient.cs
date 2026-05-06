@@ -1,3 +1,4 @@
+using System;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -210,6 +211,8 @@ public class TwitchHttpClient : HttpClient
 
     public async Task<ValidateTokenResponse> ValidateTokenAsync(string token)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(token);
+
         var httpRequest = new HttpRequestMessage
         {
             Method = HttpMethod.Get,
