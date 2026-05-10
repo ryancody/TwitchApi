@@ -80,7 +80,7 @@ public class TwitchHttpClient : HttpClient
         return SendRequestAsync<TokenResponse>(httpRequest);
     }
 
-    internal Task<SubscribeResponse> SubscribeToChannelUpdate(string token, string broadcasterUserId, string sessionId)
+    internal Task<SubscribeResponse> Subscribe(SubscriptionType subscriptionType, string token, string broadcasterUserId, string sessionId)
     {
         var httpRequestMessage = new HttpRequestMessage
         {
@@ -94,43 +94,8 @@ public class TwitchHttpClient : HttpClient
             Content = new StringContent(
                 JsonSerializer.Serialize(new
                 {
-                    type = "channel.update",
-                    version = "2",
-                    condition = new
-                    {
-                        broadcaster_user_id = broadcasterUserId,
-                        user_id = broadcasterUserId
-                    },
-                    transport = new
-                    {
-                        method = "websocket",
-                        session_id = sessionId
-                    }
-                }),
-                Encoding.UTF8,
-                "application/json"
-            )
-        };
-
-        return SendRequestAsync<SubscribeResponse>(httpRequestMessage);
-    }
-
-    internal Task<SubscribeResponse> SubscribeToChannelChatMessage(string token, string broadcasterUserId, string sessionId)
-    {
-        var httpRequestMessage = new HttpRequestMessage
-        {
-            Method = HttpMethod.Post,
-            RequestUri = new Uri("https://api.twitch.tv/helix/eventsub/subscriptions"),
-            Headers =
-            {
-                { "Client-ID", appId },
-                { "Authorization", $"Bearer {token}" }
-            },
-            Content = new StringContent(
-                JsonSerializer.Serialize(new
-                {
-                    type = "channel.chat.message",
-                    version = "1",
+                    type = subscriptionType.Name,
+                    version = subscriptionType.Version,
                     condition = new
                     {
                         broadcaster_user_id = broadcasterUserId,
@@ -231,7 +196,7 @@ public class TwitchHttpClient : HttpClient
             UserId = validateTokenResponse.UserId
         });
 
-        if (validateTokenResponse.IsSuccessStatusCode)
+        if (validateTokenResponse.IsSuccessStatusCode) 
             TokenValidated?.Invoke(token);
 
         return validateTokenResponse;

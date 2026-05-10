@@ -1,8 +1,11 @@
+using System.Collections.Concurrent;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using TwitchApi.Models;
+using TwitchApi.Providers;
+using TwitchApi.Providers.Models;
 
 namespace TwitchApi;
 
@@ -34,20 +37,19 @@ public class TwitchClient
     private TwitchHttpClient httpClient;
     private ILogger<TwitchClient> logger;
     private CancellationTokenSource cts = new CancellationTokenSource();
-    private Queue<WebSocketMessage> messageQueue = [];
+    private ConcurrentQueue<WebSocketMessage> messageQueue = [];
     private User broadcasterUser;
-    private DeviceCodeResponse deviceCodeResponse;
     private readonly string channelName;
-    private readonly string appId;
-    private bool isTokenValid = false;
+    private volatile bool isTokenValid = false;
     private const int shortValidationTimer = 2000;
+    private readonly IAuthProvider authProvider;
 
-    public TwitchClient(string channelName, string appId, ILogger<TwitchClient> logger)
+    public TwitchClient(string channelName, TwitchHttpClient httpClient, IAuthProvider authProvider, ILogger<TwitchClient> logger)
     {
-        httpClient = new TwitchHttpClient(appId);
+        this.httpClient = httpClient;
         this.channelName = channelName;
-        this.appId = appId;
         this.logger = logger;
+        this.authProvider = authProvider;
         httpClient.RequestProcessed += OnRequestProcessed;
         httpClient.LoginInfoValidated += OnLoginInfoValidated;
 
@@ -56,6 +58,9 @@ public class TwitchClient
             ConnectionStatus = ConnectionStatus.Connected;
             TokenValidated?.Invoke(token);
         };
+
+        if (authProvider is LocalAuthProvider localProvider)
+            localProvider.DeviceAuthorizationRequested += url => DeviceAuthorizationRequested?.Invoke(url);
     }
 
     private void OnLoginInfoValidated(LoginInfo info) => LoginInfo = info;
@@ -70,7 +75,7 @@ public class TwitchClient
         }
     }
 
-    public async Task ConnectAsync(bool skipDeviceCode = false)
+    public async Task ConnectAsync()
     {
         ConnectionStatus = ConnectionStatus.Connecting;
 
@@ -81,19 +86,16 @@ public class TwitchClient
         webSocket?.Dispose();
         webSocket = new ClientWebSocket();
 
-        var token = await GetAuthInfo();
+        var authInfo = await authProvider.GetAuthInfoAsync();
 
-        if (token is null
-            && !skipDeviceCode)
+        if (authInfo is null)
         {
-            deviceCodeResponse = await httpClient.GetDeviceCode();
+            var deviceCodeResponse = await httpClient.GetDeviceCode();
             logger.LogInformation("Verify device at " + deviceCodeResponse.VerificationUri);
             DeviceAuthorizationRequested?.Invoke(deviceCodeResponse.VerificationUri);
         }
 
         _ = Task.Run(QueryTokenValidation, cts.Token);
-        _ = Task.Run(Receive, cts.Token);
-        _ = Task.Run(ProcessMessages, cts.Token);
     }
 
     public async Task DisconnectAsync()
@@ -105,23 +107,30 @@ public class TwitchClient
 
         ConnectionStatus = ConnectionStatus.Disconnected;
 
-        SaveAuthInfo(null);
+        await authProvider.SaveAuthInfoAsync(null);
     }
 
     public async Task<UsersResponse> GetUsers(string[] logins = null, string[] ids = null)
     {
-        var token = await GetAuthInfo();
+        var authInfo = await authProvider.GetAuthInfoAsync();
 
-        if (token is null)
+        if (authInfo is null)
             throw new Exception("No valid token available");
 
-        return await httpClient.GetUsers(token.AccessToken, logins, ids);
+        return await httpClient.GetUsers(authInfo.AccessToken, logins, ids);
     }
 
     public async Task<bool> IsUserSubscribed(string chatterUserId)
     {
-        var token = await GetAuthInfo();
-        var broadcasterSubsciptionResponse = await httpClient.GetBroadcasterSubscriptions(token.AccessToken, broadcasterUser.Id, chatterUserId);
+        var authInfo = await authProvider.GetAuthInfoAsync();
+
+        if (authInfo is null)
+        {
+            logger.LogInformation("Unable to check subscription: No valid token available");
+            return false;
+        }
+
+        var broadcasterSubsciptionResponse = await httpClient.GetBroadcasterSubscriptions(authInfo.AccessToken, broadcasterUser.Id, chatterUserId);
         var subscriber = broadcasterSubsciptionResponse?.Data.FirstOrDefault();
 
         return !string.IsNullOrWhiteSpace(subscriber?.PlanName);
@@ -132,55 +141,58 @@ public class TwitchClient
 
     public async Task ValidateAuthInfo()
     {
-        var token = await GetAuthInfo();
+        var authInfo = await authProvider.GetAuthInfoAsync();
 
-        if (token is null)
+        if (authInfo is null)
         {
             logger.LogInformation("No valid token available for validation");
             return;
         }
 
-        await httpClient.ValidateTokenAsync(token.AccessToken);
+        await httpClient.ValidateTokenAsync(authInfo.AccessToken);
     }
 
     private async Task QueryTokenValidation()
     {
         while (!cts.IsCancellationRequested)
         {
-            if (!isTokenValid)
+            try
             {
-                logger.LogInformation("checking for valid token...");
-                var authToken = await GetAuthInfo();
-
-                if (authToken is not null)
+                if (!isTokenValid)
                 {
-                    var validateTokenResponse = await httpClient.ValidateTokenAsync(authToken.AccessToken);
+                    logger.LogInformation("checking for valid token...");
+                    var authInfo = await authProvider.GetAuthInfoAsync();
 
-                    if (validateTokenResponse.IsSuccessStatusCode)
+                    if (authInfo is not null)
                     {
-                        ConnectionStatus = ConnectionStatus.Connected;
-                        isTokenValid = true;
-                        broadcasterUser = (await httpClient.GetUsers(authToken.AccessToken, logins: [channelName])).Data.First();
+                        var validateTokenResponse = await httpClient.ValidateTokenAsync(authInfo.AccessToken);
 
-                        try
+                        if (validateTokenResponse.IsSuccessStatusCode)
                         {
+                            ConnectionStatus = ConnectionStatus.Connected;
+                            isTokenValid = true;
+                            broadcasterUser = (await httpClient.GetUsers(authInfo.AccessToken, logins: [channelName])).Data.First();
+
                             if (webSocket.State != WebSocketState.Open && webSocket.State != WebSocketState.Connecting)
                             {
                                 logger.LogInformation("Validated token, starting websocket...");
                                 var uri = new Uri("wss://eventsub.wss.twitch.tv/ws");
                                 await webSocket.ConnectAsync(uri, cts.Token);
+
+                                _ = Task.Run(Receive, cts.Token);
+                                _ = Task.Run(ProcessMessages, cts.Token);
                             }
-                        }
-                        catch (Exception e)
-                        {
-                            logger.LogInformation("error starting websocket: " + e.Message);
-                        }
 
-                        logger.LogInformation("websocket: " + webSocket.State);
+                            logger.LogInformation("websocket: " + webSocket.State);
 
-                        await Task.Delay(1000);
+                            await Task.Delay(1000);
+                        }
                     }
                 }
+            }
+            catch (Exception e)
+            {
+                logger.LogInformation("error starting websocket: " + e.Message);
             }
 
             await Task.Delay(shortValidationTimer);
@@ -203,7 +215,7 @@ public class TwitchClient
                 }
                 catch (TaskCanceledException)
                 {
-                    // Ignore cancellation exceptions
+                    // Don't care about task cancellation exceptions
                     return;
                 }
                 catch
@@ -225,8 +237,6 @@ public class TwitchClient
                     }
                 }
             }
-
-            await Task.Delay(100);
         }
     }
 
@@ -236,16 +246,17 @@ public class TwitchClient
         {
             while (messageQueue.Count > 0)
             {
-                var message = messageQueue.Dequeue();
-
-                logger.LogInformation($"Processing message {message.Metadata.MessageId} of type {message.Metadata.MessageType}");
-                ProcessMessage(message);
+                if (messageQueue.TryDequeue(out var message))
+                {
+                    logger.LogInformation($"Processing message {message.Metadata.MessageId} of type {message.Metadata.MessageType}");
+                    _ = ProcessMessage(message);
+                }
             }
             await Task.Delay(100);
         }
     }
 
-    private void ProcessMessage(WebSocketMessage message)
+    private async Task ProcessMessage(WebSocketMessage message)
     {
         switch (message.Metadata.MessageType)
         {
@@ -253,7 +264,7 @@ public class TwitchClient
                 var sessionId = message.Payload.Session.Id;
 
                 logger.LogInformation($"Session established with ID: {sessionId}");
-                Subscribe(message.Payload.Session.Id);
+                await Subscribe(message.Payload.Session.Id);
                 break;
 
             case MessageTypes.Notification:
@@ -281,82 +292,18 @@ public class TwitchClient
         MessageReceived?.Invoke(eventData);
     }
 
-    private async void Subscribe(string sessionId)
+    private async Task Subscribe(string sessionId)
     {
-        var token = await GetAuthInfo();
+        var authInfo = await authProvider.GetAuthInfoAsync();
 
-        _ = httpClient.SubscribeToChannelUpdate(token.AccessToken, broadcasterUser.Id, sessionId);
-        _ = httpClient.SubscribeToChannelChatMessage(token.AccessToken, broadcasterUser.Id, sessionId);
-    }
-
-    private async Task<AuthInfo> GetAuthInfo()
-    {
-        if (File.Exists(GetGlobalizedAuthPath()))
+        if (authInfo is null)
         {
-            AuthInfo cachedAuthInfo = null;
-
-            try
-            {
-                var localJson = File.ReadAllText(GetGlobalizedAuthPath());
-                cachedAuthInfo = JsonSerializer.Deserialize<AuthInfo>(localJson);
-            }
-            catch (Exception ex)
-            {
-                logger.LogInformation($"Unable to deserialize cached token: {ex.Message}");
-            }
-
-            if (cachedAuthInfo is not null)
-            {
-                if (cachedAuthInfo.ExpirationDate > DateTimeOffset.UtcNow.AddMinutes(5))
-                    return cachedAuthInfo;
-                else
-                {
-                    logger.LogInformation("Refreshing auth token");
-
-                    var refreshedAuthInfo = await httpClient.RefreshAuthToken(cachedAuthInfo.RefreshToken);
-                    var refreshedToken = new AuthInfo(refreshedAuthInfo.AccessToken, refreshedAuthInfo.RefreshToken, refreshedAuthInfo.ExpiresIn);
-
-                    SaveAuthInfo(refreshedToken);
-
-                    return refreshedToken;
-                }
-            }
+            logger.LogInformation("Unable to subscribe: No valid token available");
+            return;
         }
 
-        if (deviceCodeResponse?.DeviceCode is null)
-        {
-            logger.LogInformation("Unable to get AuthInfo: Device code missing");
-            return null;
-        }
-
-        var tokenResponse = await httpClient.GetTokenResponse(deviceCodeResponse.DeviceCode);
-
-        if (!tokenResponse.IsSuccessStatusCode)
-        {
-            logger.LogInformation("Message: " + tokenResponse.Message);
-            return null;
-        }
-
-        var token = new AuthInfo(tokenResponse.AccessToken, tokenResponse.RefreshToken, tokenResponse.ExpiresIn);
-
-        SaveAuthInfo(token);
-
-        return token;
-    }
-
-    private string GetGlobalizedAuthPath()
-    {
-        var dir = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        return Path.Combine(dir, $"TwitchApi-{appId}", "twitch_auth.json");
-    }
-
-    private void SaveAuthInfo(AuthInfo authInfo)
-    {
-        logger.LogInformation($"Saving auth info to {GetGlobalizedAuthPath()}");
-
-        var authJson = JsonSerializer.Serialize(authInfo);
-
-        Directory.CreateDirectory(Path.GetDirectoryName(GetGlobalizedAuthPath())!);
-        File.WriteAllText(GetGlobalizedAuthPath(), authJson);
+        _ = httpClient.Subscribe(SubscriptionTypes.ChannelUpdate, authInfo.AccessToken, broadcasterUser.Id, sessionId);
+        _ = httpClient.Subscribe(SubscriptionTypes.ChannelChatMessage, authInfo.AccessToken, broadcasterUser.Id, sessionId);
+        _ = httpClient.Subscribe(SubscriptionTypes.ChannelSubscribe, authInfo.AccessToken, broadcasterUser.Id, sessionId);
     }
 }

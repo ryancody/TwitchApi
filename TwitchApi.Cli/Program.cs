@@ -1,5 +1,7 @@
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using TwitchApi;
+using TwitchApi.Extensions;
 using TwitchApi.Models;
 
 if (!Console.IsOutputRedirected)
@@ -25,7 +27,11 @@ var id = appInfo.RootElement.GetProperty("id").GetString();
 ArgumentNullException.ThrowIfNull(channel);
 ArgumentNullException.ThrowIfNull(id);
 
-client = new TwitchClient(channel, id, new Logger());
+var services = new ServiceCollection()
+    .AddTwitchApi(channel, id)
+    .BuildServiceProvider();
+
+client = services.GetRequiredService<TwitchClient>();
 client.MessageReceived += (Event @event) =>
 {
     Console.WriteLine($"Received {@event.MessageType}");
