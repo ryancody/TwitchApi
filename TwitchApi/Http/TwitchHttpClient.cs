@@ -80,7 +80,7 @@ public class TwitchHttpClient : HttpClient
         return SendRequestAsync<TokenResponse>(httpRequest);
     }
 
-    internal Task<SubscribeResponse> Subscribe(SubscriptionType subscriptionType, string token, string broadcasterUserId, string sessionId)
+    internal Task<SubscribeResponse> Subscribe(SubscriptionType subscriptionType, string token, string broadcasterUserId, string userId, string sessionId)
     {
         var httpRequestMessage = new HttpRequestMessage
         {
@@ -99,7 +99,7 @@ public class TwitchHttpClient : HttpClient
                     condition = new
                     {
                         broadcaster_user_id = broadcasterUserId,
-                        user_id = broadcasterUserId
+                        user_id = userId
                     },
                     transport = new
                     {

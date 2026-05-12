@@ -6,4 +6,5 @@ public class MessageTypes
     public const string Notification = "notification";
     public const string SessionKeepalive = "session_keepalive";
     public const string AuthorizationPending = "authorization_pending";
+    public const string SessionReconnect = "session_reconnect";
 }

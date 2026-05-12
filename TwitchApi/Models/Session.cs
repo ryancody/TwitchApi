@@ -14,7 +14,7 @@ public class Session
     public string ConnectedAt { get; set; }
 
     [JsonPropertyName("keepalive_timeout_seconds")]
-    public int KeepaliveTimeoutSeconds { get; set; }
+    public int? KeepaliveTimeoutSeconds { get; set; }
 
     [JsonPropertyName("reconnect_url")]
     public string ReconnectUrl { get; set; }

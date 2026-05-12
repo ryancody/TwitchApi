@@ -43,6 +43,8 @@ public class TwitchClient
     private volatile bool isTokenValid = false;
     private const int shortValidationTimer = 2000;
     private readonly IAuthProvider authProvider;
+    private const string eventSubWebSocketUrl = "wss://eventsub.wss.twitch.tv/ws";
+    // private const string eventSubWebSocketUrl = "ws://127.0.0.1:8080/ws";
 
     public TwitchClient(string channelName, TwitchHttpClient httpClient, IAuthProvider authProvider, ILogger<TwitchClient> logger)
     {
@@ -85,15 +87,6 @@ public class TwitchClient
         isTokenValid = false;
         webSocket?.Dispose();
         webSocket = new ClientWebSocket();
-
-        var authInfo = await authProvider.GetAuthInfoAsync();
-
-        if (authInfo is null)
-        {
-            var deviceCodeResponse = await httpClient.GetDeviceCode();
-            logger.LogInformation("Verify device at " + deviceCodeResponse.VerificationUri);
-            DeviceAuthorizationRequested?.Invoke(deviceCodeResponse.VerificationUri);
-        }
 
         _ = Task.Run(QueryTokenValidation, cts.Token);
     }
@@ -176,7 +169,7 @@ public class TwitchClient
                             if (webSocket.State != WebSocketState.Open && webSocket.State != WebSocketState.Connecting)
                             {
                                 logger.LogInformation("Validated token, starting websocket...");
-                                var uri = new Uri("wss://eventsub.wss.twitch.tv/ws");
+                                var uri = new Uri(eventSubWebSocketUrl);
                                 await webSocket.ConnectAsync(uri, cts.Token);
 
                                 _ = Task.Run(Receive, cts.Token);
@@ -233,7 +226,10 @@ public class TwitchClient
                     if (!string.IsNullOrEmpty(text))
                     {
                         logger.LogInformation("Received: " + text);
-                        messageQueue.Enqueue(JsonSerializer.Deserialize<WebSocketMessage>(text));
+
+                        var message = JsonSerializer.Deserialize<WebSocketMessage>(text);
+
+                        messageQueue.Enqueue(message);
                     }
                 }
             }
@@ -248,7 +244,7 @@ public class TwitchClient
             {
                 if (messageQueue.TryDequeue(out var message))
                 {
-                    logger.LogInformation($"Processing message {message.Metadata.MessageId} of type {message.Metadata.MessageType}");
+                    logger.LogInformation($"Processing message {message.Metadata?.MessageId} of type {message.Metadata?.MessageType}");
                     _ = ProcessMessage(message);
                 }
             }
@@ -258,11 +254,10 @@ public class TwitchClient
 
     private async Task ProcessMessage(WebSocketMessage message)
     {
-        switch (message.Metadata.MessageType)
+        switch (message.Metadata?.MessageType)
         {
             case MessageTypes.SessionWelcome:
                 var sessionId = message.Payload.Session.Id;
-
                 logger.LogInformation($"Session established with ID: {sessionId}");
                 await Subscribe(message.Payload.Session.Id);
                 break;
@@ -277,6 +272,16 @@ public class TwitchClient
                 ConnectionStatus = ConnectionStatus.Connected;
                 break;
 
+            case MessageTypes.SessionReconnect:
+                var reconnectUrl = message.Payload.Session.ReconnectUrl;
+                logger.LogInformation($"Reconnecting to: {reconnectUrl}");
+                
+                webSocket.Dispose();
+                webSocket = new ClientWebSocket();
+                
+                await webSocket.ConnectAsync(new Uri(reconnectUrl), cts.Token);
+                break;
+
             default:
                 logger.LogInformation($"Unknown message type: {message.Metadata.MessageType}");
                 break;
@@ -287,7 +292,7 @@ public class TwitchClient
     {
         var eventData = message.Payload.Event;
 
-        logger.LogInformation($"Event received: Broadcaster {eventData.BroadcasterUserName}, Chatter {eventData.ChatterUserName}, Message: {eventData.Message.Text}");
+        logger.LogInformation($"Event received: MessageType: {message.Metadata?.MessageType ?? "empty"}, Broadcaster {eventData?.BroadcasterUserName ?? "empty"}, Chatter {eventData?.ChatterUserName ?? "empty"}, Message: {eventData?.Message?.Text ?? "empty"}");
 
         MessageReceived?.Invoke(eventData);
     }
@@ -299,11 +304,11 @@ public class TwitchClient
         if (authInfo is null)
         {
             logger.LogInformation("Unable to subscribe: No valid token available");
-            return;
+            return; 
         }
-
-        _ = httpClient.Subscribe(SubscriptionTypes.ChannelUpdate, authInfo.AccessToken, broadcasterUser.Id, sessionId);
-        _ = httpClient.Subscribe(SubscriptionTypes.ChannelChatMessage, authInfo.AccessToken, broadcasterUser.Id, sessionId);
-        _ = httpClient.Subscribe(SubscriptionTypes.ChannelSubscribe, authInfo.AccessToken, broadcasterUser.Id, sessionId);
+        
+        _ = httpClient.Subscribe(SubscriptionTypes.ChannelUpdate, authInfo.AccessToken, broadcasterUser.Id, broadcasterUser.Id, sessionId);
+        _ = httpClient.Subscribe(SubscriptionTypes.ChannelChatMessage, authInfo.AccessToken, broadcasterUser.Id, broadcasterUser.Id, sessionId);
+        _ = httpClient.Subscribe(SubscriptionTypes.ChannelSubscribe, authInfo.AccessToken, broadcasterUser.Id, broadcasterUser.Id, sessionId);
     }
 }

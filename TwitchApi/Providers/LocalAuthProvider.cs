@@ -41,7 +41,7 @@ public class LocalAuthProvider : IAuthProvider
                 logger.LogInformation($"Unable to deserialize cached token: {ex.Message}");
             }
 
-            if (cachedAuthInfo is not null)
+            if (cachedAuthInfo?.RefreshToken is not null)
             {
                 if (cachedAuthInfo.ExpirationDate > DateTimeOffset.UtcNow.AddMinutes(5))
                     return cachedAuthInfo;

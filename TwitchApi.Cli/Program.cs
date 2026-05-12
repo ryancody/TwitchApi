@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using TwitchApi;
@@ -35,6 +36,10 @@ client = services.GetRequiredService<TwitchClient>();
 client.MessageReceived += (Event @event) =>
 {
     Console.WriteLine($"Received {@event.MessageType}");
+};
+client.DeviceAuthorizationRequested += (verificationUri) =>
+{
+    Process.Start(new ProcessStartInfo(verificationUri) { UseShellExecute = true });
 };
 
 await client.ConnectAsync();
