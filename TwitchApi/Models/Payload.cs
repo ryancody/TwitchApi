@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using TwitchApi.Models.Events;
 
 namespace TwitchApi.Models;
 

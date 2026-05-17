@@ -1,18 +1,13 @@
-using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
-namespace TwitchApi.Models;
+namespace TwitchApi.Models.Events;
 
-public class Event
+/// <summary>
+/// The channel.chat.message subscription type sends a notification when any user sends a message to a channel’s chat room.
+/// </summary>
+public class ChannelChatMessageEvent : Event
 {
-    [JsonPropertyName("broadcaster_user_id")]
-    public string BroadcasterUserId { get; set; }
-
-    [JsonPropertyName("broadcaster_user_login")]
-    public string BroadcasterUserLogin { get; set; }
-
-    [JsonPropertyName("broadcaster_user_name")]
-    public string BroadcasterUserName { get; set; }
+    public const string ChannelChatMessageEventType = "channel.chat.message";
 
     [JsonPropertyName("source_broadcaster_user_id")]
     public string SourceBroadcasterUserId { get; set; }
@@ -42,7 +37,7 @@ public class Event
     public bool? IsSourceOnly { get; set; }
 
     [JsonPropertyName("message")]
-    public ChatMessage Message { get; set; }
+    public Message Message { get; set; }
 
     [JsonPropertyName("color")]
     public string Color { get; set; }

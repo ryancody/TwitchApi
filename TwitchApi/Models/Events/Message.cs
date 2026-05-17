@@ -1,9 +1,8 @@
-using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
-namespace TwitchApi.Models;
+namespace TwitchApi.Models.Events;
 
-public class ChatMessage
+public class Message
 {
     [JsonPropertyName("text")]
     public string Text { get; set; }
