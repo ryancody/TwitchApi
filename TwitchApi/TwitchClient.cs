@@ -9,7 +9,7 @@ namespace TwitchApi;
 
 public class TwitchClient
 {
-    public event Action<Event> MessageReceived;
+    public event Action<WebSocketMessage> MessageReceived;
     public event Action<ConnectionStatus> ConnectionStatusChanged;
     public event Action<string> DeviceAuthorizationRequested;
     public event Action<string> TokenValidated;
@@ -268,11 +268,7 @@ public class TwitchClient
 
     private void ProcessNotification(WebSocketMessage message)
     {
-        var eventData = message.Payload.Event;
-
-        logger.LogInformation($"Event received: MessageType: {message.Metadata?.MessageType ?? "empty"}, Broadcaster {eventData?.BroadcasterUserName ?? "empty"}, Chatter {eventData?.ChatterUserName ?? "empty"}, Message: {eventData?.Message?.Text ?? "empty"}");
-
-        MessageReceived?.Invoke(eventData);
+        MessageReceived?.Invoke(message);
     }
 
     private async Task<SubscribeResponse[]> Subscribe(string sessionId)

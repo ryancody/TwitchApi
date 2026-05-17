@@ -33,10 +33,6 @@ var services = new ServiceCollection()
     .BuildServiceProvider();
 
 client = services.GetRequiredService<TwitchClient>();
-client.MessageReceived += (Event @event) =>
-{
-    Console.WriteLine($"Received {@event.MessageType}");
-};
 client.DeviceAuthorizationRequested += (verificationUri) =>
 {
     Process.Start(new ProcessStartInfo(verificationUri) { UseShellExecute = true });
