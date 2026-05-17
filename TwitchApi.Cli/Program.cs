@@ -42,6 +42,6 @@ client.DeviceAuthorizationRequested += (verificationUri) =>
     Process.Start(new ProcessStartInfo(verificationUri) { UseShellExecute = true });
 };
 
-await client.ConnectAsync();
+client.Connect();
 
 await Task.Delay(-1);

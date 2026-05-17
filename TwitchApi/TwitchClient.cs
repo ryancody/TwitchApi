@@ -1,9 +1,7 @@
-using System.Collections.Concurrent;
 using System.Net.WebSockets;
-using System.Text;
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using TwitchApi.Models;
+using TwitchApi.Models.Responses;
 using TwitchApi.Providers;
 using TwitchApi.Providers.Models;
 
@@ -33,18 +31,19 @@ public class TwitchClient
     }
 
     private ConnectionStatus connectionStatus = ConnectionStatus.Disconnected;
-    private ClientWebSocket webSocket;
+    private SocketWrapper webSocket;
     private TwitchHttpClient httpClient;
     private ILogger<TwitchClient> logger;
     private CancellationTokenSource cts = new CancellationTokenSource();
-    private ConcurrentQueue<WebSocketMessage> messageQueue = [];
     private User broadcasterUser;
     private readonly string channelName;
     private volatile bool isTokenValid = false;
     private const int shortValidationTimer = 2000;
     private readonly IAuthProvider authProvider;
-    private const string eventSubWebSocketUrl = "wss://eventsub.wss.twitch.tv/ws";
-    // private const string eventSubWebSocketUrl = "ws://127.0.0.1:8080/ws";
+    // private const string eventSubWebSocketUrl = "wss://eventsub.wss.twitch.tv/ws";
+    private const string eventSubWebSocketUrl = "ws://127.0.0.1:8080/ws";
+    private Task? processMessagesTask;
+    private Task? queryTokenValidationTask;
 
     public TwitchClient(string channelName, TwitchHttpClient httpClient, IAuthProvider authProvider, ILogger<TwitchClient> logger)
     {
@@ -77,7 +76,7 @@ public class TwitchClient
         }
     }
 
-    public async Task ConnectAsync()
+    public void Connect()
     {
         ConnectionStatus = ConnectionStatus.Connecting;
 
@@ -86,9 +85,10 @@ public class TwitchClient
         cts = new CancellationTokenSource();
         isTokenValid = false;
         webSocket?.Dispose();
-        webSocket = new ClientWebSocket();
+        webSocket = new SocketWrapper(logger);
 
-        _ = Task.Run(QueryTokenValidation, cts.Token);
+        processMessagesTask = ProcessMessages();
+        queryTokenValidationTask = QueryTokenValidation();
     }
 
     public async Task DisconnectAsync()
@@ -96,7 +96,7 @@ public class TwitchClient
         cts.Cancel();
 
         if (webSocket.State == WebSocketState.Open)
-            await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Client disconnecting", CancellationToken.None);
+            await webSocket.StopReceiving();
 
         ConnectionStatus = ConnectionStatus.Disconnected;
 
@@ -169,16 +169,11 @@ public class TwitchClient
                             if (webSocket.State != WebSocketState.Open && webSocket.State != WebSocketState.Connecting)
                             {
                                 logger.LogInformation("Validated token, starting websocket...");
-                                var uri = new Uri(eventSubWebSocketUrl);
-                                await webSocket.ConnectAsync(uri, cts.Token);
-
-                                _ = Task.Run(Receive, cts.Token);
-                                _ = Task.Run(ProcessMessages, cts.Token);
+                                
+                                await webSocket.StartReceiving(new Uri(eventSubWebSocketUrl));
                             }
 
-                            logger.LogInformation("websocket: " + webSocket.State);
-
-                            await Task.Delay(1000);
+                            await Task.Delay(500);
                         }
                     }
                 }
@@ -192,60 +187,16 @@ public class TwitchClient
         }
     }
 
-    private async Task Receive()
-    {
-        var buffer = new byte[8192];
-        var sb = new StringBuilder();
-
-        while (!cts.IsCancellationRequested)
-        {
-            if (webSocket.State == WebSocketState.Open)
-            {
-                WebSocketReceiveResult result;
-                try
-                {
-                    result = await webSocket.ReceiveAsync(buffer, cts.Token);
-                }
-                catch (TaskCanceledException)
-                {
-                    // Don't care about task cancellation exceptions
-                    return;
-                }
-                catch
-                {
-                    throw;
-                }
-
-                sb.Append(Encoding.UTF8.GetString(buffer, 0, result.Count));
-
-                if (result.EndOfMessage)
-                {
-                    var text = sb.ToString();
-                    sb.Clear();
-
-                    if (!string.IsNullOrEmpty(text))
-                    {
-                        logger.LogInformation("Received: " + text);
-
-                        var message = JsonSerializer.Deserialize<WebSocketMessage>(text);
-
-                        messageQueue.Enqueue(message);
-                    }
-                }
-            }
-        }
-    }
-
     private async Task ProcessMessages()
     {
         while (!cts.IsCancellationRequested)
         {
-            while (messageQueue.Count > 0)
+            while (webSocket.Messages.Count > 0)
             {
-                if (messageQueue.TryDequeue(out var message))
+                if (webSocket.Messages.TryDequeue(out var message))
                 {
                     logger.LogInformation($"Processing message {message.Metadata?.MessageId} of type {message.Metadata?.MessageType}");
-                    _ = ProcessMessage(message);
+                    await ProcessMessage(message);
                 }
             }
             await Task.Delay(100);
@@ -274,18 +225,46 @@ public class TwitchClient
 
             case MessageTypes.SessionReconnect:
                 var reconnectUrl = message.Payload.Session.ReconnectUrl;
-                logger.LogInformation($"Reconnecting to: {reconnectUrl}");
-                
-                webSocket.Dispose();
-                webSocket = new ClientWebSocket();
-                
-                await webSocket.ConnectAsync(new Uri(reconnectUrl), cts.Token);
+                await HandleWebsocketReconnect(reconnectUrl);
                 break;
 
             default:
                 logger.LogInformation($"Unknown message type: {message.Metadata.MessageType}");
                 break;
         }
+    }
+
+    private async Task HandleWebsocketReconnect(string reconnectUrl)
+    {
+        logger.LogInformation($"Reconnecting to: {reconnectUrl}");
+
+        var newSocket = new SocketWrapper(logger);
+        
+        async void OnMessage(WebSocketMessage message)
+        {
+            logger.LogInformation($"checking for welcome message on {reconnectUrl}");
+            if (message.Metadata?.MessageType != MessageTypes.SessionWelcome)
+                return;
+
+            logger.LogInformation($"Welcome message received on new socket");
+
+            newSocket.MessageReceived -= OnMessage;
+
+            var oldsocket = webSocket;
+            webSocket = newSocket;
+            await oldsocket.StopReceiving();
+            oldsocket.Dispose();
+        };
+
+        newSocket.MessageReceived += OnMessage;
+        await newSocket.StartReceiving(new Uri(reconnectUrl));
+    }
+
+    private void OnSessionWelcome(WebSocketMessage message)
+    {
+        var sessionId = message.Payload.Session.Id;
+        logger.LogInformation($"Session established with ID: {sessionId}");
+        Subscribe(message.Payload.Session.Id).Wait();
     }
 
     private void ProcessNotification(WebSocketMessage message)
@@ -297,18 +276,20 @@ public class TwitchClient
         MessageReceived?.Invoke(eventData);
     }
 
-    private async Task Subscribe(string sessionId)
+    private async Task<SubscribeResponse[]> Subscribe(string sessionId)
     {
         var authInfo = await authProvider.GetAuthInfoAsync();
 
         if (authInfo is null)
         {
             logger.LogInformation("Unable to subscribe: No valid token available");
-            return; 
+            return []; 
         }
         
-        _ = httpClient.Subscribe(SubscriptionTypes.ChannelUpdate, authInfo.AccessToken, broadcasterUser.Id, broadcasterUser.Id, sessionId);
-        _ = httpClient.Subscribe(SubscriptionTypes.ChannelChatMessage, authInfo.AccessToken, broadcasterUser.Id, broadcasterUser.Id, sessionId);
-        _ = httpClient.Subscribe(SubscriptionTypes.ChannelSubscribe, authInfo.AccessToken, broadcasterUser.Id, broadcasterUser.Id, sessionId);
+        return await Task.WhenAll(
+             httpClient.Subscribe(SubscriptionTypes.ChannelUpdate, authInfo.AccessToken, broadcasterUser.Id, broadcasterUser.Id, sessionId),
+             httpClient.Subscribe(SubscriptionTypes.ChannelChatMessage, authInfo.AccessToken, broadcasterUser.Id, broadcasterUser.Id, sessionId),
+             httpClient.Subscribe(SubscriptionTypes.ChannelSubscribe, authInfo.AccessToken, broadcasterUser.Id, broadcasterUser.Id, sessionId)
+        );
     }
 }
