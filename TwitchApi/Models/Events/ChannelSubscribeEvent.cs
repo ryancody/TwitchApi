@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using TwitchApi.Constants;
 
 namespace TwitchApi.Models.Events;
 
@@ -8,7 +9,8 @@ namespace TwitchApi.Models.Events;
 /// </summary>
 public class ChannelSubscribeEvent : Event
 {
-    public const string SubscribeEventType = "channel.subscribe";
+    public override string Type => "channel.subscribe";
+    public static readonly List<string> RequiredScopes = new List<string> { Scopes.ChannelReadSubscriptions };
 
     [JsonPropertyName("is_gift")]
     public bool? IsGift { get; set; }

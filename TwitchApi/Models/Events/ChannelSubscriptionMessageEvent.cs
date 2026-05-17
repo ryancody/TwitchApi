@@ -1,13 +1,16 @@
 using System.Text.Json.Serialization;
+using TwitchApi.Constants;
 
 namespace TwitchApi.Models.Events;
 
 // <summary>
-// The channel.subscription.message subscription type sends a notification when a user sends a resubscription chat message in a specific channel.
+// The channel.subscription.message subscription type sends a notification 
+// when a user sends a resubscription chat message in a specific channel.
 /// </summary>
 public class ChannelSubscriptionMessageEvent : Event
 {
-    public const string ChannelSubscriptionMessageEventType = "channel.subscription.message";
+    public override string Type => "channel.subscription.message";
+    public static readonly List<string> RequiredScopes = new List<string> { Scopes.ChannelReadSubscriptions };
 
     [JsonPropertyName("cumulative_months")]
     public int? CumulativeMonths { get; set; }

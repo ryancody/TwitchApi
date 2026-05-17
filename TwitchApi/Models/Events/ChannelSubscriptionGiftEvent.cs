@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using TwitchApi.Constants;
 
 namespace TwitchApi.Models.Events;
 
@@ -8,7 +9,8 @@ namespace TwitchApi.Models.Events;
 /// </summary>
 public class ChannelSubscriptionGiftEvent : Event
 {
-    public const string ChannelSubscriptionGiftEventType = "channel.subscription.gift";
+    public override string Type => "channel.subscription.gift";
+    public static readonly List<string> RequiredScopes = new List<string> { Scopes.ChannelReadSubscriptions };
 
     [JsonPropertyName("cumulative_months")]
     public int? CumulativeMonths { get; set; }
