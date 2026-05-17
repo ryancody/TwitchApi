@@ -40,8 +40,8 @@ public class TwitchClient
     private volatile bool isTokenValid = false;
     private const int shortValidationTimer = 2000;
     private readonly IAuthProvider authProvider;
-    // private const string eventSubWebSocketUrl = "wss://eventsub.wss.twitch.tv/ws";
-    private const string eventSubWebSocketUrl = "ws://127.0.0.1:8080/ws";
+    private const string eventSubWebSocketUrl = "wss://eventsub.wss.twitch.tv/ws";
+    // private const string eventSubWebSocketUrl = "ws://127.0.0.1:8080/ws";
     private Task? processMessagesTask;
     private Task? queryTokenValidationTask;
 
@@ -99,6 +99,12 @@ public class TwitchClient
             await webSocket.StopReceiving();
 
         ConnectionStatus = ConnectionStatus.Disconnected;
+
+        if (processMessagesTask is not null)
+            await processMessagesTask;
+
+        if (queryTokenValidationTask is not null)
+            await queryTokenValidationTask;
 
         await authProvider.SaveAuthInfoAsync(null);
     }
@@ -258,13 +264,6 @@ public class TwitchClient
 
         newSocket.MessageReceived += OnMessage;
         await newSocket.StartReceiving(new Uri(reconnectUrl));
-    }
-
-    private void OnSessionWelcome(WebSocketMessage message)
-    {
-        var sessionId = message.Payload.Session.Id;
-        logger.LogInformation($"Session established with ID: {sessionId}");
-        Subscribe(message.Payload.Session.Id).Wait();
     }
 
     private void ProcessNotification(WebSocketMessage message)
