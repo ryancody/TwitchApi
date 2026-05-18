@@ -87,7 +87,15 @@ public class SocketWrapper : IDisposable
                     {
                         logger.LogInformation("Received: " + text);
 
-                        var message = JsonSerializer.Deserialize<WebSocketMessage>(text);
+                        WebSocketMessage message = null;
+                        try
+                        {
+                            message = JsonSerializer.Deserialize<WebSocketMessage>(text);
+                        }
+                        catch (Exception ex)
+                        {
+                            logger.LogError(ex, "Failed to deserialize WebSocket message: " + text);
+                        }
 
                         if (message is not null)
                         {

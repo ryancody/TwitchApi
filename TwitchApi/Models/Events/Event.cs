@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace TwitchApi.Models.Events;
 
-public abstract class Event
+public class Event
 {
     [JsonPropertyName("broadcaster_user_id")]
     public string BroadcasterUserId { get; set; }

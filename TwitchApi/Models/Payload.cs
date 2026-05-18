@@ -9,5 +9,8 @@ public class Payload
     public Session Session { get; set; }
 
     [JsonPropertyName("event")]
-    public Event Event { get; set; }
+    public string Event { get; set; }
+    
+    [JsonPropertyName("subscription")]
+    public Subscription Subscription { get; set; }
 }

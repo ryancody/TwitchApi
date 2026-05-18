@@ -28,7 +28,7 @@ ArgumentNullException.ThrowIfNull(channel);
 ArgumentNullException.ThrowIfNull(id);
 
 var services = new ServiceCollection()
-    .AddTwitchApi(channel, id)
+    .AddTwitchApi(channel, id, testServer: true)
     .BuildServiceProvider();
 
 client = services.GetRequiredService<TwitchClient>();

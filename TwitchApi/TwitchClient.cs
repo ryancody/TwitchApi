@@ -40,17 +40,17 @@ public class TwitchClient
     private volatile bool isTokenValid = false;
     private const int shortValidationTimer = 2000;
     private readonly IAuthProvider authProvider;
-    private const string eventSubWebSocketUrl = "wss://eventsub.wss.twitch.tv/ws";
-    // private const string eventSubWebSocketUrl = "ws://127.0.0.1:8080/ws";
+    private readonly string eventSubWebSocketUrl = "wss://eventsub.wss.twitch.tv/ws";
     private Task? processMessagesTask;
     private Task? queryTokenValidationTask;
 
-    public TwitchClient(string channelName, TwitchHttpClient httpClient, IAuthProvider authProvider, ILogger<TwitchClient> logger)
+    public TwitchClient(string channelName, string webSocketUrl, TwitchHttpClient httpClient, IAuthProvider authProvider, ILogger<TwitchClient> logger)
     {
         this.httpClient = httpClient;
         this.channelName = channelName;
         this.logger = logger;
         this.authProvider = authProvider;
+        eventSubWebSocketUrl = webSocketUrl;
         httpClient.RequestProcessed += OnRequestProcessed;
         httpClient.LoginInfoValidated += OnLoginInfoValidated;
 

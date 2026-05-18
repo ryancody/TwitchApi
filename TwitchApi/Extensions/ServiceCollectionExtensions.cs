@@ -7,7 +7,7 @@ namespace TwitchApi.Extensions;
 
 public static class ServiceCollectionExtensions
 {
-    public static IServiceCollection AddTwitchApi(this IServiceCollection services, string channelName, string appId)
+    public static IServiceCollection AddTwitchApi(this IServiceCollection services, string channelName, string appId, bool testServer = false)
     {
         services.AddSingleton(sp => new TwitchHttpClient(appId));
 
@@ -40,7 +40,7 @@ public static class ServiceCollectionExtensions
             var twitchHttpClient = sp.GetRequiredService<TwitchHttpClient>();
             var loggerFactory = LoggerFactory.Create(b => b.AddConsole());
             var logger = loggerFactory.CreateLogger<TwitchClient>();
-            return new TwitchClient(channelName, twitchHttpClient, authProvider, logger);
+            return new TwitchClient(channelName, testServer ? "ws://127.0.0.1:8080/ws" : "wss://eventsub.wss.twitch.tv/ws", twitchHttpClient, authProvider, logger);
         });
         return services;
     }
