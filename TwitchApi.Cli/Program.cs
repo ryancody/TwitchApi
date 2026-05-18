@@ -3,7 +3,6 @@ using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using TwitchApi;
 using TwitchApi.Extensions;
-using TwitchApi.Models;
 
 if (!Console.IsOutputRedirected)
     Console.Clear();
@@ -19,7 +18,7 @@ if (string.IsNullOrWhiteSpace(clientInfoString))
     Console.WriteLine("Twitch client info not found");
     return;
 }
-    
+
 var appInfo = JsonDocument.Parse(clientInfoString);
 
 var channel = appInfo.RootElement.GetProperty("channel").GetString();

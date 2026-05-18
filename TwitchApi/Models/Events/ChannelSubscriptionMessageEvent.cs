@@ -9,7 +9,6 @@ namespace TwitchApi.Models.Events;
 /// </summary>
 public class ChannelSubscriptionMessageEvent : Event
 {
-    public override string Type => "channel.subscription.message";
     public static readonly List<string> RequiredScopes = new List<string> { Scopes.ChannelReadSubscriptions };
 
     [JsonPropertyName("cumulative_months")]

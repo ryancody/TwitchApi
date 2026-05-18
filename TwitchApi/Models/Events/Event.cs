@@ -4,8 +4,6 @@ namespace TwitchApi.Models.Events;
 
 public abstract class Event
 {
-    public abstract string Type { get; }
-
     [JsonPropertyName("broadcaster_user_id")]
     public string BroadcasterUserId { get; set; }
 

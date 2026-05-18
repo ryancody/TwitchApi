@@ -4,12 +4,11 @@ using TwitchApi.Constants;
 namespace TwitchApi.Models.Events;
 
 // <summary>
-// The channel.subscription.gift subscription type sends a notification when a user 
-// gives one or more gifted subscriptions in a channel.
+// The channel.subscribe subscription type sends a notification when a user 
+// subscribes to a channel.
 /// </summary>
 public class ChannelSubscribeEvent : Event
 {
-    public override string Type => "channel.subscribe";
     public static readonly List<string> RequiredScopes = new List<string> { Scopes.ChannelReadSubscriptions };
 
     [JsonPropertyName("is_gift")]
