@@ -40,8 +40,8 @@ public class TwitchClient
     private volatile bool isTokenValid = false;
     private const int shortValidationTimer = 2000;
     private readonly IAuthProvider authProvider;
-    // private const string eventSubWebSocketUrl = "wss://eventsub.wss.twitch.tv/ws";
-    private const string eventSubWebSocketUrl = "ws://127.0.0.1:8080/ws";
+    private const string eventSubWebSocketUrl = "wss://eventsub.wss.twitch.tv/ws";
+    // private const string eventSubWebSocketUrl = "ws://127.0.0.1:8080/ws";
     private Task? processMessagesTask;
     private Task? queryTokenValidationTask;
 
