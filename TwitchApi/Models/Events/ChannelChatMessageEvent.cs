@@ -9,7 +9,9 @@ namespace TwitchApi.Models.Events;
 /// </summary>
 public class ChannelChatMessageEvent : Event
 {
-    public static readonly List<string> RequiredScopes = new List<string> { Scopes.UserReadChat };
+    public override string Type => "channel.chat.message";
+    public override string Version => "1";
+    public override List<string> RequiredScopes => new List<string> { Scopes.UserReadChat };
 
     [JsonPropertyName("source_broadcaster_user_id")]
     public string SourceBroadcasterUserId { get; set; }

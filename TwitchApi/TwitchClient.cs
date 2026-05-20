@@ -1,6 +1,7 @@
 using System.Net.WebSockets;
 using Microsoft.Extensions.Logging;
 using TwitchApi.Models;
+using TwitchApi.Models.Events;
 using TwitchApi.Models.Responses;
 using TwitchApi.Providers;
 using TwitchApi.Providers.Models;
@@ -43,14 +44,16 @@ public class TwitchClient
     private readonly string eventSubWebSocketUrl = "wss://eventsub.wss.twitch.tv/ws";
     private Task? processMessagesTask;
     private Task? queryTokenValidationTask;
+    private Type[] eventTypesToSubscribe = [];
 
-    public TwitchClient(string channelName, string webSocketUrl, TwitchHttpClient httpClient, IAuthProvider authProvider, ILogger<TwitchClient> logger)
+    public TwitchClient(string channelName, string eventSubWebSocketUrl, TwitchHttpClient httpClient, IAuthProvider authProvider, ILogger<TwitchClient> logger, Type[] eventTypesToSubscribe = null)
     {
         this.httpClient = httpClient;
         this.channelName = channelName;
         this.logger = logger;
         this.authProvider = authProvider;
-        eventSubWebSocketUrl = webSocketUrl;
+        this.eventTypesToSubscribe = eventTypesToSubscribe ?? Array.Empty<Type>();
+        this.eventSubWebSocketUrl = eventSubWebSocketUrl;
         httpClient.RequestProcessed += OnRequestProcessed;
         httpClient.LoginInfoValidated += OnLoginInfoValidated;
 
@@ -280,11 +283,15 @@ public class TwitchClient
             logger.LogInformation("Unable to subscribe: No valid token available");
             return []; 
         }
+
+        var tasks = eventTypesToSubscribe
+            .Where(type => type.IsClass && !type.IsAbstract && type.IsAssignableTo(typeof(IEvent)))
+            .Select(t =>
+            {
+                var type = (IEvent)Activator.CreateInstance(t);
+                return httpClient.Subscribe(type.Type, type.Version, authInfo.AccessToken, broadcasterUser.Id, broadcasterUser.Id, sessionId);
+            });
         
-        return await Task.WhenAll(
-             httpClient.Subscribe(SubscriptionTypes.ChannelUpdate, authInfo.AccessToken, broadcasterUser.Id, broadcasterUser.Id, sessionId),
-             httpClient.Subscribe(SubscriptionTypes.ChannelChatMessage, authInfo.AccessToken, broadcasterUser.Id, broadcasterUser.Id, sessionId),
-             httpClient.Subscribe(SubscriptionTypes.ChannelSubscribe, authInfo.AccessToken, broadcasterUser.Id, broadcasterUser.Id, sessionId)
-        );
+        return await Task.WhenAll(tasks);
     }
 }

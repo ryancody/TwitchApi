@@ -13,15 +13,17 @@ public class TwitchHttpClient : HttpClient
     internal Action<LoginInfo> LoginInfoValidated;
     internal Action<string> TokenValidated;
 
-    private string appId;
-    private const string scopes = "user:read:chat channel:read:subscriptions";
+    private readonly string appId;
+    private readonly string scopes;
     private readonly Dictionary<string, BroadcasterSubsciptionResponse> broadcasterSubscriptions = [];
 
-    public TwitchHttpClient(string appId) : base()
+    public TwitchHttpClient(string appId, string[] scopes) : base()
     {
         ArgumentNullException.ThrowIfNull(appId, nameof(appId));
+        ArgumentNullException.ThrowIfNull(scopes, nameof(scopes));
 
         this.appId = appId;
+        this.scopes = string.Join(" ", scopes);
     }
 
     internal Task<DeviceCodeResponse> GetDeviceCode()
@@ -79,7 +81,7 @@ public class TwitchHttpClient : HttpClient
         return SendRequestAsync<TokenResponse>(httpRequest);
     }
 
-    internal Task<SubscribeResponse> Subscribe(SubscriptionType subscriptionType, string token, string broadcasterUserId, string userId, string sessionId)
+    internal Task<SubscribeResponse> Subscribe(string eventTypeName, string eventTypeVersion, string token, string broadcasterUserId, string userId, string sessionId)
     {
         var httpRequestMessage = new HttpRequestMessage
         {
@@ -93,8 +95,8 @@ public class TwitchHttpClient : HttpClient
             Content = new StringContent(
                 JsonSerializer.Serialize(new
                 {
-                    type = subscriptionType.Name,
-                    version = subscriptionType.Version,
+                    type = eventTypeName,
+                    version = eventTypeVersion,
                     condition = new
                     {
                         broadcaster_user_id = broadcasterUserId,

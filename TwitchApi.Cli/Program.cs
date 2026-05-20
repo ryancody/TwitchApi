@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using TwitchApi;
 using TwitchApi.Extensions;
+using TwitchApi.Models.Events;
 
 if (!Console.IsOutputRedirected)
     Console.Clear();
@@ -27,8 +28,17 @@ var id = appInfo.RootElement.GetProperty("id").GetString();
 ArgumentNullException.ThrowIfNull(channel);
 ArgumentNullException.ThrowIfNull(id);
 
+var subscribedEvents = new Type[]
+{
+    typeof(ChannelChannelPointsCustomRewardRedemptionAdd),
+    typeof(ChannelChatMessageEvent),
+    typeof(ChannelSubscribeEvent),
+    typeof(ChannelSubscriptionGiftEvent),
+    typeof(ChannelSubscriptionMessageEvent),
+    typeof(ChannelUpdateEvent)
+};
 var services = new ServiceCollection()
-    .AddTwitchApi(channel, id, testServer: true)
+    .AddTwitchApi(channel, id, subscribedEvents: subscribedEvents, testServer: false)
     .BuildServiceProvider();
 
 client = services.GetRequiredService<TwitchClient>();
