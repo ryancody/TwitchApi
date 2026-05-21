@@ -9,9 +9,12 @@ namespace TwitchApi.Models.Events;
 /// </summary>
 public class ChannelChannelPointsCustomRewardRedemptionAdd : Event
 {
-    public override string Type => "channel.channel_points_custom_reward_redemption.add";
-    public override string Version => "1";
-    public override List<string> RequiredScopes => new List<string> { Scopes.ChannelReadRedemptions };
+    public static string TypeStatic => "channel.channel_points_custom_reward_redemption.add";
+    public override string Type => TypeStatic;
+    public static string VersionStatic => "1";
+    public override string Version => VersionStatic;
+    public static List<string> RequiredScopesStatic => new List<string> { Scopes.ChannelReadRedemptions };
+    public override List<string> RequiredScopes => RequiredScopesStatic;
 
     [JsonPropertyName("id")]
     public string Id { get; set; }

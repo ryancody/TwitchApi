@@ -9,9 +9,12 @@ namespace TwitchApi.Models.Events;
 /// </summary>
 public class ChannelSubscribeEvent : Event
 {
-    public override string Type => "channel.subscribe";
-    public override string Version => "1";
-    public override List<string> RequiredScopes => new List<string> { Scopes.ChannelReadSubscriptions };
+    public static string TypeStatic => "channel.subscribe";
+    public override string Type => TypeStatic;
+    public static string VersionStatic => "1";
+    public override string Version => VersionStatic;
+    public static List<string> RequiredScopesStatic => new List<string> { Scopes.ChannelReadSubscriptions };
+    public override List<string> RequiredScopes => RequiredScopesStatic;
 
     [JsonPropertyName("is_gift")]
     public bool? IsGift { get; set; }

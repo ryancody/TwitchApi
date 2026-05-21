@@ -8,9 +8,12 @@ namespace TwitchApi.Models.Events;
 /// </summary>
 public class ChannelUpdateEvent : Event
 {
-    public override string Type => "channel.update";
-    public override string Version => "1";
-    public override List<string> RequiredScopes => [];
+    public static string TypeStatic => "channel.update";
+    public override string Type => TypeStatic;
+    public static string VersionStatic => "1";
+    public override string Version => VersionStatic;
+    public static List<string> RequiredScopesStatic => [];
+    public override List<string> RequiredScopes => RequiredScopesStatic;
 
     [JsonPropertyName("title")]
     public string Title { get; set; }
