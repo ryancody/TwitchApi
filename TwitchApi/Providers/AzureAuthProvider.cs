@@ -34,7 +34,7 @@ public class AzureAuthProvider : IAuthProvider
 
         var refreshToken = await GetRefreshTokenFromConfigAsync();
 
-        if (refreshToken is null)
+        if (string.IsNullOrWhiteSpace(refreshToken))
         {
             logger.LogError("No refresh token found in App Configuration");
             return null;
