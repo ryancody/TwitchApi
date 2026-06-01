@@ -119,7 +119,7 @@ public class TwitchClient
         if (authInfo is null)
             throw new Exception("No valid token available");
 
-        return await httpClient.GetUsers(authInfo.AccessToken, logins, ids);
+        return await httpClient.GetUsers(authInfo.ClientId, authInfo.AccessToken, logins, ids);
     }
 
     public async Task<bool> IsUserSubscribed(string chatterUserId)
@@ -132,7 +132,8 @@ public class TwitchClient
             return false;
         }
 
-        var broadcasterSubsciptionResponse = await httpClient.GetBroadcasterSubscriptions(authInfo.AccessToken, broadcasterUser.Id, chatterUserId);
+        var broadcasterSubsciptionResponse = await httpClient.GetBroadcasterSubscriptions(authInfo.ClientId,
+            authInfo.AccessToken, broadcasterUser.Id, chatterUserId);
         var subscriber = broadcasterSubsciptionResponse?.Data.FirstOrDefault();
 
         return !string.IsNullOrWhiteSpace(subscriber?.PlanName);
@@ -173,7 +174,8 @@ public class TwitchClient
                         {
                             ConnectionStatus = ConnectionStatus.Connected;
                             isTokenValid = true;
-                            broadcasterUser = (await httpClient.GetUsers(authInfo.AccessToken, logins: [channelName])).Data.First();
+
+                            broadcasterUser = (await httpClient.GetUsers(authInfo.ClientId, authInfo.AccessToken, logins: [channelName])).Data.First();
 
                             if (webSocket.State != WebSocketState.Open && webSocket.State != WebSocketState.Connecting)
                             {
@@ -289,7 +291,7 @@ public class TwitchClient
             .Select(t =>
             {
                 var type = (IEvent)Activator.CreateInstance(t);
-                return httpClient.Subscribe(type.Type, type.Version, authInfo.AccessToken, broadcasterUser.Id, broadcasterUser.Id, sessionId);
+                return httpClient.Subscribe(authInfo.ClientId, authInfo.AccessToken, type.Type, type.Version, broadcasterUser.Id, broadcasterUser.Id, sessionId);
             });
         
         return await Task.WhenAll(tasks);

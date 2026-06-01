@@ -13,28 +13,23 @@ public class TwitchHttpClient : HttpClient
     internal Action<LoginInfo> LoginInfoValidated;
     internal Action<string> TokenValidated;
 
-    private readonly string appId;
-    private readonly string scopes;
     private readonly Dictionary<string, BroadcasterSubsciptionResponse> broadcasterSubscriptions = [];
 
-    public TwitchHttpClient(string appId, string[] scopes) : base()
-    {
-        ArgumentNullException.ThrowIfNull(appId, nameof(appId));
-        ArgumentNullException.ThrowIfNull(scopes, nameof(scopes));
+    public TwitchHttpClient() : base()
+    {}
 
-        this.appId = appId;
-        this.scopes = string.Join(" ", scopes);
-    }
-
-    internal Task<DeviceCodeResponse> GetDeviceCode()
+    internal Task<DeviceCodeResponse> GetDeviceCode(string clientId, string scopes)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(clientId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(scopes);
+
         var httpRequest = new HttpRequestMessage
         {
             Method = HttpMethod.Post,
             RequestUri = new Uri("https://id.twitch.tv/oauth2/device?"),
             Content = new FormUrlEncodedContent(new Dictionary<string, string>
             {
-                ["client_id"] = appId,
+                ["client_id"] = clientId,
                 ["scopes"] = scopes
             })
         };
@@ -42,9 +37,11 @@ public class TwitchHttpClient : HttpClient
         return SendRequestAsync<DeviceCodeResponse>(httpRequest);
     }
 
-    internal Task<TokenResponse> GetTokenResponse(string deviceCode)
+    internal Task<TokenResponse> GetTokenResponse(string clientId, string deviceCode, string scopes)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(clientId);
         ArgumentException.ThrowIfNullOrWhiteSpace(deviceCode);
+        ArgumentException.ThrowIfNullOrWhiteSpace(scopes);
 
         var httpRequest = new HttpRequestMessage
         {
@@ -52,9 +49,9 @@ public class TwitchHttpClient : HttpClient
             RequestUri = new Uri("https://id.twitch.tv/oauth2/token?"),
             Content = new FormUrlEncodedContent(new Dictionary<string, string>
             {
-                ["client_id"] = appId,
-                ["scopes"] = scopes,
+                ["client_id"] = clientId,
                 ["device_code"] = deviceCode,
+                ["scopes"] = scopes,
                 ["grant_type"] = "urn:ietf:params:oauth:grant-type:device_code"
             })
         };
@@ -62,8 +59,9 @@ public class TwitchHttpClient : HttpClient
         return SendRequestAsync<TokenResponse>(httpRequest);
     }
 
-    internal Task<TokenResponse> RefreshAuthToken(string refreshToken)
+    internal Task<TokenResponse> RefreshTokenAsync(string clientId, string refreshToken)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(clientId);
         ArgumentException.ThrowIfNullOrWhiteSpace(refreshToken);
 
         var httpRequest = new HttpRequestMessage
@@ -72,16 +70,38 @@ public class TwitchHttpClient : HttpClient
             RequestUri = new Uri("https://id.twitch.tv/oauth2/token?"),
             Content = new FormUrlEncodedContent(new Dictionary<string, string>
             {
-                ["client_id"] = appId,
-                ["grant_type"] = "refresh_token",
-                ["refresh_token"] = refreshToken
+                ["client_id"] = clientId,
+                ["refresh_token"] = refreshToken,
+                ["grant_type"] = "refresh_token"
             })
         };
 
         return SendRequestAsync<TokenResponse>(httpRequest);
     }
 
-    internal Task<SubscribeResponse> Subscribe(string eventTypeName, string eventTypeVersion, string token, string broadcasterUserId, string userId, string sessionId)
+    internal Task<TokenResponse> RefreshTokenAsync(string clientId, string clientSecret, string refreshToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(clientId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(clientSecret);
+        ArgumentException.ThrowIfNullOrWhiteSpace(refreshToken);
+
+        var httpRequest = new HttpRequestMessage
+        {
+            Method = HttpMethod.Post,
+            RequestUri = new Uri("https://id.twitch.tv/oauth2/token?"),
+            Content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["client_id"] = clientId,
+                ["client_secret"] = clientSecret,
+                ["refresh_token"] = refreshToken,
+                ["grant_type"] = "refresh_token"
+            })
+        };
+
+        return SendRequestAsync<TokenResponse>(httpRequest);
+    }
+
+    internal Task<SubscribeResponse> Subscribe(string clientId, string authToken, string eventTypeName, string eventTypeVersion, string broadcasterUserId, string userId, string sessionId)
     {
         var httpRequestMessage = new HttpRequestMessage
         {
@@ -89,8 +109,8 @@ public class TwitchHttpClient : HttpClient
             RequestUri = new Uri("https://api.twitch.tv/helix/eventsub/subscriptions"),
             Headers =
             {
-                { "Client-ID", appId },
-                { "Authorization", $"Bearer {token}" }
+                { "Client-ID", clientId },
+                { "Authorization", $"Bearer {authToken}" }
             },
             Content = new StringContent(
                 JsonSerializer.Serialize(new
@@ -118,8 +138,11 @@ public class TwitchHttpClient : HttpClient
     }
 
     // get info about one ore more users
-    internal Task<UsersResponse> GetUsers(string token, string[] logins = null, string[] ids = null)
+    internal Task<UsersResponse> GetUsers(string clientId, string authToken, string[] logins = null, string[] ids = null)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(clientId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(authToken);
+
         if (logins?.Length <= 0 && ids?.Length <= 0)
             throw new ArgumentException("Need at least 1 login or id to GetUsers");
 
@@ -138,15 +161,15 @@ public class TwitchHttpClient : HttpClient
             RequestUri = new Uri($"https://api.twitch.tv/helix/users?{query}"),
             Headers =
             {
-                { "Client-ID", appId },
-                { "Authorization", $"Bearer {token}" }
+                { "Client-ID", clientId },
+                { "Authorization", $"Bearer {authToken}" }
             }
         };
 
         return SendRequestAsync<UsersResponse>(httpRequest);
     }
 
-    internal async Task<BroadcasterSubsciptionResponse> GetBroadcasterSubscriptions(string token, string broadcasterUserId, string chatterUserId)
+    internal async Task<BroadcasterSubsciptionResponse> GetBroadcasterSubscriptions(string clientId, string authToken, string broadcasterUserId, string chatterUserId)
     {
         if (broadcasterSubscriptions.TryGetValue(chatterUserId, out var subscription))
             return subscription;
@@ -162,8 +185,8 @@ public class TwitchHttpClient : HttpClient
             RequestUri = new Uri(url),
             Headers =
             {
-                { "Client-ID", appId },
-                { "Authorization", $"Bearer {token}" }
+                { "Client-ID", clientId },
+                { "Authorization", $"Bearer {authToken}" }
             }
         };
 
@@ -175,9 +198,9 @@ public class TwitchHttpClient : HttpClient
         return broadcasterSubscriptionsResponse;
     }
 
-    public async Task<ValidateTokenResponse> ValidateTokenAsync(string token)
+    public async Task<ValidateTokenResponse> ValidateTokenAsync(string authToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(token);
+        ArgumentException.ThrowIfNullOrWhiteSpace(authToken);
 
         var httpRequest = new HttpRequestMessage
         {
@@ -185,7 +208,7 @@ public class TwitchHttpClient : HttpClient
             RequestUri = new Uri("https://id.twitch.tv/oauth2/validate"),
             Headers =
             {
-                { "Authorization", $"OAuth {token}" }
+                { "Authorization", $"OAuth {authToken}" }
             }
         };
 
@@ -198,7 +221,7 @@ public class TwitchHttpClient : HttpClient
         });
 
         if (validateTokenResponse.IsSuccessStatusCode) 
-            TokenValidated?.Invoke(token);
+            TokenValidated?.Invoke(authToken);
 
         return validateTokenResponse;
     }

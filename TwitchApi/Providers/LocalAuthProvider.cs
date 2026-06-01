@@ -13,23 +13,27 @@ public class LocalAuthProvider : IAuthProvider
     private TwitchHttpClient httpClient;
     private ILogger logger;
     private DeviceCodeResponse deviceCodeResponse;
+    private string scopes = string.Empty;
+    private AuthInfo cachedAuthInfo;
 
-    public LocalAuthProvider(string appId, TwitchHttpClient httpClient, ILogger logger)
+    public LocalAuthProvider(string appId, TwitchHttpClient httpClient, ILogger logger, string scopes)
     {
         ArgumentNullException.ThrowIfNull(appId, nameof(appId));
         ArgumentNullException.ThrowIfNull(httpClient, nameof(httpClient));
         ArgumentNullException.ThrowIfNull(logger, nameof(logger));
+        ArgumentNullException.ThrowIfNull(scopes, nameof(scopes));
 
         this.appId = appId;
         this.httpClient = httpClient;
         this.logger = logger;
+        this.scopes = scopes;
     }
 
     public async Task<AuthInfo> GetAuthInfoAsync()
     {
         if (File.Exists(GetGlobalizedAuthPath()))
         {
-            AuthInfo cachedAuthInfo = null;
+            cachedAuthInfo = null;
 
             try
             {
@@ -49,8 +53,13 @@ public class LocalAuthProvider : IAuthProvider
                 {
                     logger.LogInformation("Refreshing auth token");
 
-                    var refreshedAuthInfo = await httpClient.RefreshAuthToken(cachedAuthInfo.RefreshToken);
-                    var refreshedToken = new AuthInfo(refreshedAuthInfo.AccessToken, refreshedAuthInfo.RefreshToken, refreshedAuthInfo.ExpiresIn);
+                    var refreshedAuthInfo = await httpClient.RefreshTokenAsync(cachedAuthInfo.ClientId, cachedAuthInfo.ClientSecret, cachedAuthInfo.RefreshToken);
+                    var refreshedToken = new AuthInfo(
+                        cachedAuthInfo.ClientId,
+                        cachedAuthInfo.ClientSecret,
+                        refreshedAuthInfo.AccessToken,
+                        refreshedAuthInfo.RefreshToken,
+                        refreshedAuthInfo.ExpiresIn);
 
                     await SaveAuthInfoAsync(refreshedToken);
 
@@ -61,18 +70,23 @@ public class LocalAuthProvider : IAuthProvider
 
         if (deviceCodeResponse is null)
         {
-            deviceCodeResponse = await httpClient.GetDeviceCode();
+            deviceCodeResponse = await httpClient.GetDeviceCode(cachedAuthInfo.ClientId, scopes);
             DeviceAuthorizationRequested?.Invoke(deviceCodeResponse.VerificationUri);
         }
 
-        var tokenResponse = await httpClient.GetTokenResponse(deviceCodeResponse.DeviceCode);
+        var tokenResponse = await httpClient.GetTokenResponse(cachedAuthInfo.ClientId, cachedAuthInfo.ClientSecret, deviceCodeResponse.DeviceCode);
 
         if (!tokenResponse.IsSuccessStatusCode)
             return null;
 
         deviceCodeResponse = null;
 
-        var token = new AuthInfo(tokenResponse.AccessToken, tokenResponse.RefreshToken, tokenResponse.ExpiresIn);
+        var token = new AuthInfo(
+            cachedAuthInfo.ClientId,
+            cachedAuthInfo.ClientSecret,
+            tokenResponse.AccessToken,
+            tokenResponse.RefreshToken,
+            tokenResponse.ExpiresIn);
         await SaveAuthInfoAsync(token);
         return token;
     }
