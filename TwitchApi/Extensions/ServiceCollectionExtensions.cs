@@ -14,7 +14,7 @@ public static class ServiceCollectionExtensions
             .SelectMany(t => ((IEvent)Activator.CreateInstance(t)).RequiredScopes)
             .ToHashSet().ToArray();
 
-        services.AddSingleton(sp => new TwitchHttpClient(appId, scopes));
+        services.AddSingleton<TwitchHttpClient>();
 
         var isAzure = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WEBSITE_INSTANCE_ID"));
 
@@ -35,7 +35,7 @@ public static class ServiceCollectionExtensions
                 var twitchHttpClient = sp.GetRequiredService<TwitchHttpClient>();
                 var loggerFactory = LoggerFactory.Create(b => b.AddConsole());
                 var logger = loggerFactory.CreateLogger<LocalAuthProvider>();
-                return new LocalAuthProvider(appId, twitchHttpClient, logger);
+                return new LocalAuthProvider(appId, twitchHttpClient, logger, string.Join(' ', scopes));
             });
         }
 
