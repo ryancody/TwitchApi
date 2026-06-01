@@ -53,10 +53,10 @@ public class LocalAuthProvider : IAuthProvider
                 {
                     logger.LogInformation("Refreshing auth token");
 
-                    var refreshedAuthInfo = await httpClient.RefreshTokenAsync(cachedAuthInfo.ClientId, cachedAuthInfo.ClientSecret, cachedAuthInfo.RefreshToken);
+                    var refreshedAuthInfo = await httpClient.RefreshTokenAsync(appId, cachedAuthInfo.RefreshToken);
                     var refreshedToken = new AuthInfo(
-                        cachedAuthInfo.ClientId,
-                        cachedAuthInfo.ClientSecret,
+                        appId,
+                        string.Empty, // Client secret is not needed for device code flow refreshes
                         refreshedAuthInfo.AccessToken,
                         refreshedAuthInfo.RefreshToken,
                         refreshedAuthInfo.ExpiresIn);
@@ -70,11 +70,11 @@ public class LocalAuthProvider : IAuthProvider
 
         if (deviceCodeResponse is null)
         {
-            deviceCodeResponse = await httpClient.GetDeviceCode(cachedAuthInfo.ClientId, scopes);
+            deviceCodeResponse = await httpClient.GetDeviceCode(appId, scopes);
             DeviceAuthorizationRequested?.Invoke(deviceCodeResponse.VerificationUri);
         }
 
-        var tokenResponse = await httpClient.GetTokenResponse(cachedAuthInfo.ClientId, cachedAuthInfo.ClientSecret, deviceCodeResponse.DeviceCode);
+        var tokenResponse = await httpClient.GetTokenResponse(appId, deviceCodeResponse.DeviceCode, scopes);
 
         if (!tokenResponse.IsSuccessStatusCode)
             return null;
@@ -82,8 +82,8 @@ public class LocalAuthProvider : IAuthProvider
         deviceCodeResponse = null;
 
         var token = new AuthInfo(
-            cachedAuthInfo.ClientId,
-            cachedAuthInfo.ClientSecret,
+            appId,
+            string.Empty, // Client secret is not needed for device code flow refreshes
             tokenResponse.AccessToken,
             tokenResponse.RefreshToken,
             tokenResponse.ExpiresIn);

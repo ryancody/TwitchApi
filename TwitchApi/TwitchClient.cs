@@ -166,7 +166,8 @@ public class TwitchClient
                     logger.LogInformation("checking for valid token...");
                     var authInfo = await authProvider.GetAuthInfoAsync();
 
-                    if (authInfo is not null)
+                    if (!string.IsNullOrEmpty(authInfo?.AccessToken)
+                        && !string.IsNullOrEmpty(authInfo?.ClientId))
                     {
                         var validateTokenResponse = await httpClient.ValidateTokenAsync(authInfo.AccessToken);
 

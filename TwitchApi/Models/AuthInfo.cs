@@ -16,4 +16,7 @@ public class AuthInfo
         RefreshToken = refreshToken;
         ExpirationDate = DateTimeOffset.UtcNow.AddSeconds(secondsToExpiration);
     }
+
+    public AuthInfo()
+    {}
 }
