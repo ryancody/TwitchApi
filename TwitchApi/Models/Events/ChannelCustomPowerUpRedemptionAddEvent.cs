@@ -6,7 +6,7 @@ namespace TwitchApi.Models.Events;
 // The channel.custom_power_up_redemption.add subscription type sends a notification when a user 
 // redeems a custom power up.
 /// </summary>
-public class ChannelCustomPowerUpRedemptionAdd : Event
+public class ChannelCustomPowerUpRedemptionAddEvent : Event
 {
     public static string TypeStatic => "channel.custom_power_up_redemption.add";
     public override string Type => TypeStatic;

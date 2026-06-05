@@ -6,7 +6,7 @@ namespace TwitchApi.Models.Events;
 // The channel.cheer subscription type sends a notification when a user 
 // cheers in a channel.
 /// </summary>
-public class ChannelCheer : Event
+public class ChannelCheerEvent : Event
 {
     public static string TypeStatic => "channel.cheer";
     public override string Type => TypeStatic;

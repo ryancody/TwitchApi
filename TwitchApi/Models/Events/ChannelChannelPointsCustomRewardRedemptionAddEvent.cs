@@ -7,7 +7,7 @@ namespace TwitchApi.Models.Events;
 // The channel.subscribe subscription type sends a notification when a user 
 // subscribes to a channel.
 /// </summary>
-public class ChannelChannelPointsCustomRewardRedemptionAdd : Event
+public class ChannelChannelPointsCustomRewardRedemptionAddEvent : Event
 {
     public static string TypeStatic => "channel.channel_points_custom_reward_redemption.add";
     public override string Type => TypeStatic;
