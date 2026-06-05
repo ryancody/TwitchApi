@@ -30,7 +30,7 @@ ArgumentNullException.ThrowIfNull(id);
 
 var subscribedEvents = new Type[]
 {
-    typeof(ChannelChannelPointsCustomRewardRedemptionAdd),
+    typeof(ChannelChannelPointsCustomRewardRedemptionAddEvent),
     typeof(ChannelChatMessageEvent),
     typeof(ChannelSubscribeEvent),
     typeof(ChannelSubscriptionGiftEvent),
