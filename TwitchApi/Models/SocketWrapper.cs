@@ -71,9 +71,10 @@ public class SocketWrapper : IDisposable
                     // Don't care about task cancellation exceptions
                     return;
                 }
-                catch
+                catch (WebSocketException ex)
                 {
-                    throw;
+                    logger.LogError("WebSocket error: {Message} | Code: {Code}", ex.Message, ex.WebSocketErrorCode);
+                    return;
                 }
 
                 sb.Append(Encoding.UTF8.GetString(buffer, 0, result.Count));
