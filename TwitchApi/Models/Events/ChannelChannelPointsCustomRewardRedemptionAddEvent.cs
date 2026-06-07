@@ -19,6 +19,15 @@ public class ChannelChannelPointsCustomRewardRedemptionAddEvent : Event
     [JsonPropertyName("id")]
     public string Id { get; set; }
 
+    [JsonPropertyName("user_id")]
+    public string UserId { get; set; }
+
+    [JsonPropertyName("user_name")]
+    public string UserName { get; set; }
+
+    [JsonPropertyName("user_login")]
+    public string UserLogin { get; set; }
+
     [JsonPropertyName("redeemed_at")]
     public string RedeemedAt { get; set; }
 

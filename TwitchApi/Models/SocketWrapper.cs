@@ -10,6 +10,8 @@ public class SocketWrapper : IDisposable
 {
     public event Action<WebSocketMessage> MessageReceived;
     public event Action<WebSocketState> WebSocketStateChanged;
+    public event Action<Exception> WebSocketError;
+
     public ConcurrentQueue<WebSocketMessage> Messages = [];
     public WebSocketState State => webSocket.State;
 
@@ -74,6 +76,7 @@ public class SocketWrapper : IDisposable
                 catch (WebSocketException ex)
                 {
                     logger.LogError("WebSocket error: {Message} | Code: {Code}", ex.Message, ex.WebSocketErrorCode);
+                    WebSocketError?.Invoke(ex);
                     return;
                 }
 

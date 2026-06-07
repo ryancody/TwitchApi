@@ -237,7 +237,7 @@ public class TwitchClient
 
             case MessageTypes.SessionReconnect:
                 var reconnectUrl = message.Payload.Session.ReconnectUrl;
-                await HandleWebsocketReconnect(reconnectUrl);
+                await HandleWebsocketReconnectAsync(reconnectUrl);
                 break;
 
             default:
@@ -246,7 +246,7 @@ public class TwitchClient
         }
     }
 
-    private async Task HandleWebsocketReconnect(string reconnectUrl)
+    private async Task HandleWebsocketReconnectAsync(string reconnectUrl)
     {
         logger.LogInformation($"Reconnecting to: {reconnectUrl}");
 
@@ -264,12 +264,22 @@ public class TwitchClient
 
             var oldsocket = webSocket;
             webSocket = newSocket;
+            oldsocket.WebSocketError -= OnWebSocketError;
+
             await oldsocket.StopReceiving();
             oldsocket.Dispose();
         };
 
         newSocket.MessageReceived += OnMessage;
+        newSocket.WebSocketError += OnWebSocketError;
         await newSocket.StartReceiving(new Uri(reconnectUrl));
+    }
+
+    private async void OnWebSocketError(Exception ex)
+    {
+        logger.LogError($"WebSocket error: {ex.Message}");
+        ConnectionStatus = ConnectionStatus.Disconnected;
+        await HandleWebsocketReconnectAsync(eventSubWebSocketUrl).ConfigureAwait(false);
     }
 
     private void ProcessNotification(WebSocketMessage message)
