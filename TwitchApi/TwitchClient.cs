@@ -14,6 +14,7 @@ public class TwitchClient
     public event Action<ConnectionStatus> ConnectionStatusChanged;
     public event Action<string> DeviceAuthorizationRequested;
     public event Action<string> TokenValidated;
+    public event Action<DateTimeOffset> KeepaliveReceived;
     public LoginInfo LoginInfo { get; private set; }
     public ConnectionStatus ConnectionStatus
     {
@@ -233,6 +234,7 @@ public class TwitchClient
             case MessageTypes.SessionKeepalive:
                 logger.LogInformation("keepalive received.");
                 ConnectionStatus = ConnectionStatus.Connected;
+                KeepaliveReceived?.Invoke(DateTimeOffset.UtcNow);
                 break;
 
             case MessageTypes.SessionReconnect:

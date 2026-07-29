@@ -46,6 +46,7 @@ client.DeviceAuthorizationRequested += (verificationUri) =>
 {
     Process.Start(new ProcessStartInfo(verificationUri) { UseShellExecute = true });
 };
+client.KeepaliveReceived += (DateTimeOffset dto) => Console.WriteLine(dto);
 
 client.Connect();
 
